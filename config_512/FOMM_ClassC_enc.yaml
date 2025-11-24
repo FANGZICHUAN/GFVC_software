@@ -1,0 +1,29 @@
+codec_name: 'FOMM'             ## 'FV2V' OR 'FOMM' OR 'CFTE' ###You should choose which GFVC model to be used.
+
+#dataset params 
+dataset: 'ClassC'
+num_frames: 250 # 125  frames for 'CFVQA'
+
+#video params   
+height: 512
+width: 512
+iframe_format: 'YUV420'   ## 'YUV420'  OR 'RGB444' ###You need to define what color format to use for encoding the first frame.
+
+#codec params   
+inference_mode: 'encoder'           ## "Encoder" OR 'Decoder'   ###You need to define whether to encode or decode a sequence.
+qp_list: ["22", "32", "42", "52"]
+feature_coding_mode: 'AE' # AE or SEI
+ae_qf: [64,16] #Number of bins for KP coding
+sei_coordinate_qf: 12
+sei_matrix_qf: 4 
+encoder_type: 'FOMM'
+no_analysis_in_decoder: 'OFF' 
+color_calibration: 'OFF'
+
+# Stay 'OFF' for FOMM
+base_layer_params: #Parameters for base layer coder
+  use_base_layer: 'OFF' #Set to 'OFF' to fall back to animation-only reconstruction
+  qp: [0] 
+
+#evaluation params
+metrics: ['dists','lpips','psnr', 'ssim']

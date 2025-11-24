@@ -1,0 +1,371 @@
+import matplotlib
+matplotlib.use('Agg')
+import os
+import time
+import json
+import torch
+import numpy as np
+from tqdm import tqdm
+from GFVC.utils import *
+from GFVC.CFTE_utils import *
+from GFVC.FOMM_utils import *
+from GFVC.FV2V_utils import *
+from GFVC.SRLR_utils import *
+
+from GFVC.HDAC.bl_codecs import bl_decoders
+from GFVC.codecs_utils import *
+from GFVC.Translator.Paramtranscoder import *
+from argparse import ArgumentParser
+from skimage.transform import resize
+
+from copy import copy
+    
+if __name__ == "__main__":
+    #######Get options###########################################################################################################################################################         
+    parser = ArgumentParser()
+    parser.add_argument("--model_name", type=str)
+    parser.add_argument("--original_seq", default='./testing_sequence/001_256x256.rgb', type=str, help="path to the input testing sequence")
+    parser.add_argument("--encoding_frames", default=250, type=int, help="the number of encoding frames")
+    parser.add_argument("--seq_width", default=256, type=int, help="the width of encoding frames")
+    parser.add_argument("--seq_height", default=256, type=int, help="the height of encoding frames")
+    parser.add_argument("--ae_qf", action='append', help="the quantization factor for the residual conversion from float-type to int-type")
+    parser.add_argument("--iframe_qp", default=42, help="the quantization parameters for encoding the Intra frame")
+    parser.add_argument("--iframe_format", default='YUV420', type=str,help="the quantization parameters for encoding the Intra frame")
+    parser.add_argument("--device", default='cuda', type=str,help="execution device: [cpu, cuda]")
+    parser.add_argument("--encoder_type", default='CFTE', type=str,help="encoder type of GFVC")
+
+    parser.add_argument("--feature_coding_mode", default='AE', type=str,help="the implementation algorithm for supplement enhancement informantion on the basis of GFVC software")
+    parser.add_argument("--sei_coordinate_qf", default=4, type=int, help="the quantization factor for the residual conversion from float-type to int-type")
+    parser.add_argument("--sei_matrix_qf", default=4, type=int, help="the quantization factor for the residual conversion from float-type to int-type")
+    parser.add_argument("--use_base_layer", default='OFF', type=str,help="Flag to use hybrid coding framework (OFF sets animation-only reconstruction)")
+    parser.add_argument("--bl_qp", default=50, type=int,help="QP value for encoding the base layer")    
+    parser.add_argument("--no_analysis_in_decoder", default='OFF', type=str,help="QP value for encoding the base layer")
+    parser.add_argument("--SRLR_feature_size", default=32, type=int, help="feature size factor for decoding the scalable layer")
+    parser.add_argument("--scalable_base_model_name", default='CFTE', type=str, help="base model name")
+    parser.add_argument("--scalable_feature_code_mode", default='AE_Traditional', type=str, help="scalable_feature_code_mode")
+    parser.add_argument("--scalable_feature_diff_mode", default='ON', type=str, help="scalable_feature_diff_mode")
+
+        
+    opt = parser.parse_args()
+    ################################################################################################################################################################################
+    ######Setting Options###########################################################################################################################################################
+    #Number of frames to code
+    frames=int(opt.encoding_frames)
+    #Input Frame dimensions
+    width=opt.seq_width
+    height=opt.seq_width
+    #Feature quantization factor for arithmetic coding
+    q_step = list(map(int, opt.ae_qf))
+    #Reference frame QP
+    qp=opt.iframe_qp
+    #Reference frame color format
+    iframe_format=opt.iframe_format
+    #Sequence number
+    seq = os.path.splitext(os.path.split(opt.original_seq)[-1])[0]
+    device = opt.device
+    # GFVC type of encoder
+    encoder_type = opt.encoder_type
+    #Feature coding mode, AE or SEI
+    feature_coding_mode=opt.feature_coding_mode
+    #Quantization factor for coordinate in SEI
+    coordinate_Qstep=opt.sei_coordinate_qf
+    #Quantization factor for matrix in SEI
+    matrix_Qstep=opt.sei_matrix_qf
+    #Execution device
+    if not torch.cuda.is_available():
+        device = 'cpu'
+    # print('Device:',device)
+    #Base layer for HDAC model
+    use_base_layer = (opt.use_base_layer=='ON')
+    bl_qp = opt.bl_qp # ["37","42","47","52"]
+    ## CFTE
+    model_name = opt.model_name
+    #Coding first frame for no analysis decoding
+    no_analysis_in_decoder = (opt.no_analysis_in_decoder=='ON')
+    if no_analysis_in_decoder:
+        assert feature_coding_mode=='AE', 'No analysis in decoder is only supported for AE feature coding mode'
+        no_analysis_in_decoder_flag = '+no_analysis_decoding'
+    else:
+        no_analysis_in_decoder_flag = ''
+        
+    SRLR_feature_size=opt.SRLR_feature_size        
+    scalable_base_model_name=opt.scalable_base_model_name
+    scalable_feature_code_mode=opt.scalable_feature_code_mode
+    scalable_feature_diff_mode=opt.scalable_feature_diff_mode
+       
+    ################################################################################################################################################################################
+    #######Setting decoding translation if the encoder does not match###############################################################################################################################################
+    model_dirname='../experiment-scalable/'+scalable_base_model_name+'_'+encoder_type+"/"+'FeatureSize_'+str(SRLR_feature_size)+'/'+'Iframe_'+str(iframe_format) +"/"+ str(width)+'x'+str(height) +"/" +feature_coding_mode + no_analysis_in_decoder_flag+'/'+scalable_feature_code_mode+'/'+scalable_feature_diff_mode+'/'   
+    if encoder_type != model_name:
+        translated =True
+        assert feature_coding_mode == 'AE', 'Feature translation only supported for AE'
+    else:
+        translated = False
+    if translated:
+        print('--Decoding with feature translation--')
+
+        trans_enc, trans_dec, encoder_analyzer = get_translator(encoder_type, model_name, width, device)
+        
+        dec_output_path=os.path.join(model_dirname,model_name+'_dec') + '/'
+    else:
+      
+        dec_output_path=os.path.join(model_dirname,'dec') + '/'
+        dec_scalable_output_path=os.path.join(model_dirname,'dec_scalable') + '/'
+        
+    
+    ################################################################################################################################################################################   
+    ######Setting directories#######################################################################################################################################################
+    ## Input paths [compact features and reference frame bitstreams]
+    #Base layer for HDAC
+    if use_base_layer:
+        cf_input_path = os.path.join(model_dirname,'kp',seq+'_qp'+str(qp)+'_bqp'+str(bl_qp))+ '/'
+        ref_input_path = os.path.join(model_dirname,'enc',seq+'_qp'+str(qp)+'_bqp'+str(bl_qp))+ '/'
+        bl_input_path =os.path.join(model_dirname,'bl',seq+'_qp'+str(qp)+'_bqp'+str(bl_qp))
+    else:
+        cf_input_path = os.path.join(model_dirname,'kp',seq+'_qp'+str(qp)) + '/'
+        ref_input_path = os.path.join(model_dirname,'enc',seq+'_qp'+str(qp))  + '/'
+        feature_input_path = os.path.join(model_dirname,'feature',seq+'_qp'+str(qp)) + '/'
+        SRLR_feature_output_path = os.path.join(model_dirname,'feature',seq+'_qp'+str(qp))+ '/'
+        
+    # Output paths for decoded sequences
+    
+    os.makedirs(dec_output_path,exist_ok=True)     # the real decoded video  -base layer
+    os.makedirs(dec_scalable_output_path,exist_ok=True)     # the real decoded video  -scalable layer
+    
+    if use_base_layer:
+        output_video_rgb =dec_output_path+seq+'_qp'+str(qp)+'_bqp'+str(bl_qp)+'.rgb'
+        output_video_mp4 =dec_output_path+seq+'_qp'+str(qp)+'_bqp'+str(bl_qp)+'.mp4'
+    
+    else:
+        output_video_rgb =dec_output_path+seq+'_qp'+str(qp)+'.rgb'
+        output_video_mp4 =dec_output_path+seq+'_qp'+str(qp)+'.mp4'
+        output_scalable_video_rgb =dec_scalable_output_path+seq+'_qp'+str(qp)+'.rgb'
+        output_scalable_video_mp4 =dec_scalable_output_path+seq+'_qp'+str(qp)+'.mp4'        
+        
+        
+        
+    base_model_config_path = f'./GFVC/{scalable_base_model_name}/checkpoint/{scalable_base_model_name}.yaml'
+    base_model_checkpoint_path = f'./GFVC/{scalable_base_model_name}/checkpoint/{scalable_base_model_name}-checkpoint.pth.tar' 
+    
+    #Initialize the codec with scalable models
+    scalable_model_config_path = f'./GFVC/{model_name}/checkpoint/Feature_{SRLR_feature_size}/{model_name}.yaml'
+    scalable_model_checkpoint_path = f'./GFVC/{model_name}/checkpoint/Feature_{SRLR_feature_size}/{model_name}-checkpoint.pth.tar'       
+    
+    f_dec=open(output_video_rgb,'w') 
+    f_dec_scalable=open(output_scalable_video_rgb,'w') 
+    
+    
+    ################################################################################################################################################################################
+    #######Codec and data preparation###############################################################################################################################################
+    #Reference Image Decoder
+    ref_decoder = RefereceImageDecoder(ref_input_path,qp,width=width,height=height,dec_name='vtm')
+
+    # Keypoint Decoder
+    kp_decoder = get_inter_coder(scalable_base_model_name)(base_model_config_path if scalable_base_model_name=='FV2V' else None, base_model_checkpoint_path if scalable_base_model_name=='FV2V' else None ,kp_output_dir=cf_input_path,q_step=q_step,device=device)
+
+    #Reconstruction models     
+    #Initialize the GFVC base model
+    inter_coder = get_inter_coder(scalable_base_model_name)(base_model_config_path, base_model_checkpoint_path, device=device)    
+    
+    #Initialize the GFVC scalable model
+    inter_scalable_coder = get_inter_scalable_coder(model_name)(scalable_model_config_path, scalable_model_checkpoint_path, 
+                                                                SRLR_feature_output_path, q_step, SRLR_feature_size, device=device)       
+    out_video = []
+    out_scalable_video = []
+   
+    ################################################################################################################################################################################
+    #######AE feature coding mode###################################################################################################################################################
+
+    if use_base_layer:
+        #create base layer spanning the entire sequence
+        print('Creating base layer..')
+        bl_decoding_params = {
+                'fps':25,
+                'frame_dim': (int(height),int(width)),
+                'bin_path': bl_input_path}
+        bl_dec = bl_decoders['vvc'](**bl_decoding_params)
+        info_out = bl_dec.run()
+        bl_frames = np.transpose(info_out['dec_frames'],[0,3,1,2])
+   
+        inter_coder.base_layer = bl_frames
+
+    if feature_coding_mode=='AE':
+        decoding_start_time = time.time()
+        for frame_idx in tqdm(range(0, frames)):       
+            with torch.no_grad():     
+                if frame_idx in [0]:      # I-frame                      
+                    reference, ref_bits = ref_decoder.decompress(frame_idx)  
+                    
+                         
+                    if isinstance(reference, np.ndarray):
+                        #convert to tensor
+                        out_fr = reference
+                        img_rec_out = np.transpose(reference,[2,0,1])
+                        #convert the HxWx3 (uint8)-> 1x3xHxW (float32) 
+                        reference = frame2tensor(img_rec_out)
+                    else:
+                        #When using LIC for reference compression we get back a tensor 1x3xHXW
+                        img_rec_out = tensor2frame(reference)
+                        out_fr = np.transpose(img_rec_out,[1,2,0])
+                        reference = frame2tensor(img_rec_out)   # normalize to 0-1 
+                
+                    out_video.append(out_fr)
+                    out_scalable_video.append(out_fr)
+                    
+                    reference = reference.to(device)
+
+                    img_rec_out.tofile(f_dec)
+                    img_rec_out.tofile(f_dec_scalable)
+                     
+                    #update decoder with the reference frame info
+                    inter_coder.reference_frame_(reference)
+                    kp_decoder.reference_frame_(reference)
+                    inter_scalable_coder.reference_frame_(reference)
+                    
+
+                    if not no_analysis_in_decoder:
+                        kp_reference = inter_coder.analysis_model(reference) 
+                        # print(kp_reference)
+                        if translated:
+                            kp_reference_enc = encoder_analyzer(reference)
+                        else:
+                            kp_reference_enc = kp_reference
+                        
+                        inter_coder.kp_reference_(kp_reference)
+                        #append to list for use in predictively coding the next frame KPs
+                        #KPs used for relative decoding of inter_Frame KPs
+                        kp_value_frame = kp_decoder.get_kp_list(kp_reference_enc, frame_idx)
+                        kp_decoder.rec_sem.append(kp_value_frame)
+                        
+                        ### scalable reference
+                        feature_reference = inter_scalable_coder.analysis_model(reference) 
+                        inter_scalable_coder.kp_reference_(feature_reference)
+                        feature_value_frame = inter_scalable_coder.get_kp_list(feature_reference, frame_idx)
+                        inter_scalable_coder.rec_sem.append(feature_value_frame)
+                        
+                        
+                    else:
+                        dec_kp_ref_frame, kp_bits = kp_decoder.decode_kp(frame_idx)
+                        
+                        if translated:
+                            dec_kp_ref_frame = trans_dec(trans_enc(dec_kp_ref_frame))
+                        inter_coder.kp_reference_(dec_kp_ref_frame)
+                        
+                        ### scalable reference                        
+                        dec_feature_ref_frame, feature_bits = inter_scalable_coder.decode_kp(frame_idx)
+                        inter_scalable_coder.kp_reference_(dec_feature_ref_frame)
+                        
+                    Iframe_decoding_time = time.time() - decoding_start_time
+                else:
+                    # Decoding motion features
+                    dec_kp_inter_frame, kp_bits = kp_decoder.decode_kp(frame_idx)
+                    # print(dec_kp_inter_frame)
+                    if translated:
+                        dec_kp_inter_frame = trans_dec(trans_enc(dec_kp_inter_frame))
+                        
+                    # Inter_frame reconstruction through animation -- base layer
+                    predicted_frame  = inter_coder.predict_inter_frame(dec_kp_inter_frame, frame_idx)
+                    pred = tensor2frame(predicted_frame)
+                    #Save to output file
+                    pred.tofile(f_dec)             
+                    out_video.append(np.transpose(pred,[1,2,0]))  
+                    
+                    
+                    if scalable_feature_code_mode=='AE_Traditional':        
+                    
+                        if scalable_feature_diff_mode=='ON':
+                            ###################  scalable layer  #############################3
+                            # Decoding scalable motion features
+                            dec_feature_inter_frame_diff, feature_bits = inter_scalable_coder.decode_kp(frame_idx)
+                            dec_feature_inter_frame_base = inter_scalable_coder.analysis_model(predicted_frame) ################
+                            dec_feature_inter_frame={}
+                            dec_feature_inter_frame['residual']=dec_feature_inter_frame_diff['residual']+dec_feature_inter_frame_base['residual']
+                            # Inter_frame reconstruction through sanimation -- scalable layer
+                            predicted_scalable_frame  = inter_scalable_coder.predict_inter_frame(predicted_frame, dec_feature_inter_frame['residual'], frame_idx)
+                        else:
+                            ###################  scalable layer  #############################3
+                            # Decoding scalable motion features
+                            dec_feature_inter_frame, feature_bits = inter_scalable_coder.decode_kp(frame_idx)
+                            # Inter_frame reconstruction through sanimation -- scalable layer
+                            predicted_scalable_frame  = inter_scalable_coder.predict_inter_frame(predicted_frame, dec_feature_inter_frame['residual'], frame_idx)
+                            
+                    elif scalable_feature_code_mode=='AE_Learning':        
+                            
+                        # Decoding scalable motion features
+                        dec_feature_inter_frame_base = inter_scalable_coder.analysis_model(predicted_frame) ################
+                        dec_feature_inter_frame, feature_bits = inter_scalable_coder.decode_feature_learning(dec_feature_inter_frame_base, frame_idx)              
+                        # Inter_frame reconstruction through sanimation -- scalable layer
+                        predicted_scalable_frame  = inter_scalable_coder.predict_inter_frame(predicted_frame, dec_feature_inter_frame['residual'], frame_idx)
+
+                    pred_scalable = tensor2frame(predicted_scalable_frame)
+                    #Save to output file
+                    pred_scalable.tofile(f_dec_scalable)             
+                    out_scalable_video.append(np.transpose(pred_scalable,[1,2,0]))  
+
+                        
+        total_decoding_time = time.time() - decoding_start_time
+        print(f'Decoding time: {total_decoding_time:.2f}s, I-frame decoding time: {Iframe_decoding_time:.2f}s, p-frame encoding time: {(total_decoding_time-Iframe_decoding_time):.2f}s')
+
+        f_dec.close()     
+         
+    
+#     ################################################################################################################################################################################
+#     #######SEI feature coding mode###################################################################################################################################################
+#     elif feature_coding_mode=='SEI' :
+#         decoding_start_time = time.time()
+#         dir_outSEI=model_dirname+'/outSEI/'+seq+'_qp'+str(qp)+'/'   
+#         os.makedirs(dir_outSEI,exist_ok=True)     # the real decoded video              
+
+
+#         outSEI=dir_outSEI+'generative_face_video.txt'
+    
+#         if iframe_format=='RGB444':
+#             os.system("./image_codecs/vtm/decode_rgb444_SEI.sh "+ref_input_path+'allframe_org'+" "+outSEI)
+#         elif iframe_format=='YUV420':
+#             os.system("./image_codecs/vtm/decode_SEI.sh "+ref_input_path+'allframe_org'+" "+outSEI)
+
+#         # # 调用示例        
+#         split_text_file(outSEI, dir_outSEI)
+
+#         if iframe_format=='RGB444':
+            
+#             ## Base Picture with Base matric reference
+#             f_temp=open(dec_output_path+'allframe_org_dec.rgb','rb')
+#             img_rec=np.fromfile(f_temp,np.uint8,3*height*width).reshape((3,height,width))   # 3xHxW RGB         
+#             img_rec = img_rec.transpose(2, 0, 1) 
+#             out_video.append(img_rec) 
+#         elif iframe_format=='YUV420':
+#             rec_ref_yuv=yuv420_to_rgb444(ref_input_path+'allframe_org_dec.yuv', width, height, 0, 1, False, False) 
+#             img_rec = rec_ref_yuv[0]
+#             out_video.append(img_rec) 
+#             img_rec = img_rec.transpose(2, 0, 1)    # HxWx3
+#         img_rec.tofile(f_dec) 
+#         img_rec = resize(img_rec, (3, height, width))    # normlize to 0-1                                      
+#         with torch.no_grad(): 
+#             reference = torch.tensor(img_rec[np.newaxis]).float() #.astype(np.float32)
+#             reference = reference.cuda()    # require GPU
+#             inter_coder.reference_frame_(reference)
+#             ref_kp_value = inter_coder.analysis_model(reference) 
+#             inter_coder.kp_reference_(ref_kp_value)   
+            
+#             for frame in range(1,frames):
+#                 kp_value = sei_decode(open(dir_outSEI+'gfv_'+str(frame)+'.txt', 'r', encoding='utf-8'), model_name ,device)
+#                 # print(kp_value)
+#                 prediction = inter_coder.predict_inter_frame(kp_value, frame)  #######################
+#                 pred = tensor2frame(prediction)
+#                 out_video.append(np.transpose(pred,[1,2,0])) 
+#                 pred.tofile(f_dec)                        
+#         ###
+#         bin_save=ref_input_path+'allframe_org.bin'
+#         f_dec.close()     
+#         total_decoding_time = time.time() - decoding_start_time
+#         print(f'Decoding time: {total_decoding_time:.2f}s')  
+             
+#     else:
+#         raise ValueError('Invalid feature coding mode. Please select either AE or SEI')     
+     
+    imageio.mimsave(output_video_mp4,out_video, fps=25.0)
+    imageio.mimsave(output_scalable_video_mp4,out_scalable_video, fps=25.0)
+
+
+

@@ -1,0 +1,35 @@
+codec_name: 'Pupils'
+
+#dataset params
+sequence_dir: '/home/ysz/datasets/testing_sequence_30/'  ###You should download the testing sequence and modify the dir.
+yuv_sequence_dir: /home/ysz/datasets/testing_sequence_30_yuv420/'
+dataset: [ 'ClassA'] #,'CFVQA'] ## 'CFVQA' OR 'VOXCELEB'  ###You should choose which dataset to be encoded.
+ClassA_params:
+  seq_list: ['002'] #,'002','003','004','005','006','007','008','009','010','011','012','013','014','015']#,'020']
+  num_frames: 250 #   frames for 'VOXCELEB'
+
+ClassB_params:
+  seq_list: ['001'] #,'002','003','004','005','006','007','008','009','010','011','012','013','014','015']
+  num_frames: 125 #   frames for 'CFVQA'
+
+gfvc: ['fv2v']   # 'fv2v' OR 'fomm' OR 'cfte' ###You should choose which GFVC model to be used.
+#video params
+height: 256
+width: 256
+iframe_format: 'YUV420'   ## 'YUV420'  OR 'RGB444' ###You need to define what color format to use for encoding the first frame.
+
+#codec params
+qp_list: ["22"] #, "27", "32", "37"]#, "32", "42", "52"]
+feature_coding_mode: 'SEI' # AE or SEI
+
+gfvc_run: 'True'
+# Indicates whether to run the GFVC code.
+# GFVE pupil SEI requires the GFVC framework to be implemented,
+# so it is necessary to ensure that the corresponding GFVC results are available during runtime.
+
+pupils_params:
+  qf_list: [5] #, 4, 3] # the precision factor of GFVE pupil SEI
+  adaptive_list: [ 'ON' ] # 'OFF'] # Indicates whether to enable the adaptive mechanism,
+                                  # which determines the value of pupilPresentIdx based on the data.
+
+

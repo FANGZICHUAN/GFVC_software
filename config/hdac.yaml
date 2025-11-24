@@ -1,0 +1,36 @@
+codec_name: 'HDAC'             ## 'FV2V' OR 'FOMM' OR 'CFTE' ###You should choose which GFVC model to be used.
+
+#dataset params 
+sequence_dir: '/home/datasets/testing_sequence_30/' 
+yuv_sequence_dir: '/home/datasets/testing_sequence_30_yuv420/'
+seq_list: ['001'] #,'002','003','004','005','006','007','008','009','010','011','012','013','014','015'] #
+dataset: 'ClassB'   ## 'CFVQA' OR 'VOXCELEB'  ###You should choose which dataset to be encoded.
+num_frames: 50 #250 # 125  frames for 'CFVQA'
+
+#video params   
+height: 512
+width: 512
+iframe_format: 'YUV420'   ## 'YUV420'  OR 'RGB444' ###You need to define what color format to use for encoding the first frame.
+
+
+#codec params   
+inference_mode: 'encoder'           ## "Encoder" OR 'Decoder'   ###You need to define whether to encode or decode a sequence.
+qp_list: ["22"]  # ['12','22','32','42'] 
+feature_coding_mode: 'AE' # AE or SEI
+ae_qf: [64,64] #Number of bins for KP coding
+sei_coordinate_qf: 8
+sei_matrix_qf: 4 
+sei_coordinate_qf: 8
+encoder_type: 'HDAC'
+no_analysis_in_decoder: 'OFF' 
+color_calibration: 'OFF'
+
+
+# => HDAC
+base_layer_params: #Parameters for base layer coder
+  use_base_layer: 'ON' #Set to 'OFF' to fall back to animation-only reconstruction
+  qp: ["42"] #Base layer coding QP ["37","42","47","52"]
+
+
+#evaluation params
+metrics: ['dists','lpips','psnr', 'ssim']

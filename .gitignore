@@ -1,0 +1,4 @@
+testing_sequences/
+testing_sequences_YUV420/
+experiment/
+*.pth.tar

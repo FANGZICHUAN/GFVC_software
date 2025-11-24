@@ -1,0 +1,71 @@
+common_params:
+  num_kp: 1
+  scale_factor: 0.09375  # 0.25 0.1875 0.125 #0.09375 0.0625 0.03125 0.015625     ##  0.25->64x64  0.125->32x32 || 0.0625:16x16 || 0.03125:8x8  || 0.015625: 4x4
+  num_ref: 1
+  num_channels: 3            ## RGB
+  codec_mode: CFTE  #Face_vid2vid #CFTE #FOMM 
+  
+dataset_params:
+  root_dir:  /mnt/bolin/Data/VoxCeleb/
+  frame_shape: [256, 256, 3]
+  id_sampling: True
+  pairs_list: data/vox256.csv
+  augmentation_params:
+    flip_param:
+      horizontal_flip: True
+      time_flip: True
+    jitter_param:
+      brightness: 0.1
+      contrast: 0.1
+      saturation: 0.1
+      hue: 0.1
+
+model_params:
+  kp_detector_params:
+     num_blocks: 5
+     block_expansion: 32
+     max_features:  1024  
+     temperature: 0.1
+  generator_params:
+    block_expansion: 64
+    max_features: 512
+    num_down_blocks: 3 #2
+    num_bottleneck_blocks: 6
+  discriminator_params:
+    scales: [1,0.5]
+    num_blocks: 4
+    block_expansion: 32
+    max_features: 512
+    sn: True
+  videocompressor_params:
+    out_channel_mv: 1
+
+train_params:
+  temperature: 0.1
+  num_epochs: 200  
+  num_repeats: 30  ########40
+  batch_size: 26 #52 #26 #24 #28 #32  
+  checkpoint_freq: 50
+  epoch_milestones: [150, 190] #[60, 90]
+  lr_fusiongenerator: 2.0e-4 
+  lr_discriminator: 2.0e-4
+  lr_residual_detector: 2.0e-4 
+  lr_videocompressor: 2.0e-4
+  scales: [1, 0.5, 0.25, 0.125]
+  loss_weights:
+    feature_matching: [10, 10, 10, 10]
+    # generator_attentioned: 5      
+    generator_fused: 10  
+    discriminator_fused: 10   
+    perceptual_attentioned: [10, 10, 10, 10]  
+    perceptual_fused: [20, 20, 20, 20]  
+    face_features: [3, 3, 3, 3]    
+    rdlambda: 224  #648/800 for size 32 || 784/832 for size 64 || 128/192 for size 16 || 32/64 for size 8
+    optical_flow: 20
+
+
+
+visualizer_params:
+  kp_size: 5
+  draw_border: True
+  colormap: 'gist_rainbow'
