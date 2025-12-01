@@ -28,12 +28,12 @@ CONFIG = 'config_256'
 MODELS = ['CFTE']#,'CFTE','DAC']#, ,'DAC','HDAC','HDAC_Extension'] 'FV2V','FOMM',
 DECODER_MODELS = ['CFTE']#,'CFTE','DAC']#,'DAC','HDAC','HDAC_Extension','DAC'] 'FV2V',  'FOMM',
 
-ENCODE = False
-DECODE = False
+ENCODE = True
+DECODE = True
 EVALUATE = True
-RGB2YUV = False
-EVAL_RGB = False
-EVAL_YUV = False
+RGB2YUV = True
+EVAL_RGB = True
+EVAL_YUV = True
 SUMMARY_RESULTS = True
 TRANSLATED = True
 ###Please specify encoder type in decoder config files if you want to execute the translated model.
