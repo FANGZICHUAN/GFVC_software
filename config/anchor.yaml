@@ -1,0 +1,32 @@
+codec_name: 'VVC_Anchor'             ## 'FV2V' OR 'FOMM' OR 'CFTE' ###You should choose which GFVC model to be used.
+
+#dataset params 
+sequence_dir: '/home/fangzichuan/gfvc_v1-AhG16_GFVC_Software_v6/testing_sequences/' 
+yuv_sequence_dir: '/home/fangzichuan/gfvc_v1-AhG16_GFVC_Software_v6/testing_sequences_YUV420/'
+seq_list: ['001'] #,'002','003','004','005','006','007','008','009','010','011','012','013','014','015']
+dataset: 'CFVQA' ## 'CFVQA' OR 'VOXCELEB'  ###You should choose which dataset to be encoded.
+num_frames: 125 # 125  frames for 'CFVQA'
+
+#video params   
+height: 256
+width: 256
+iframe_format: 'YUV420'   ## 'YUV420'  OR 'RGB444' ###You need to define what color format to use for encoding the first frame.
+
+#codec params   
+inference_mode: 'decoder'           ## "Encoder" OR 'Decoder'   ###You need to define whether to encode or decode a sequence.
+qp_list: ["22"] #, "32", "42", "52"]
+feature_coding_mode: 'AE' # AE or SEI
+ae_qf: [4,4] #Number of bins for KP coding
+sei_coordinate_qf: 0
+sei_matrix_qf: 4 
+encoder_type: 'CFTE'
+no_analysis_in_decoder: 'OFF' 
+color_calibration: 'OFF'
+
+# Stay 'OFF' for CFTE
+base_layer_params: #Parameters for base layer coder
+  use_base_layer: 'OFF' #Set to 'OFF' to fall back to animation-only reconstruction
+  qp: [0] 
+
+#evaluation params
+metrics: ['dists','lpips','psnr', 'ssim']

@@ -7,7 +7,7 @@ from GFVC.utils import read_config_file
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument("--config", default='../config/dac.yaml', type=str, help="Path to codec configuration file")
+    parser.add_argument("--config", default='../config/cfte.yaml', type=str, help="Path to codec configuration file")
     parser.add_argument("--dataset_config", type=str, default=None,help="Path to codec configuration file")
     opt = parser.parse_args()
     args = read_config_file(opt.config)
