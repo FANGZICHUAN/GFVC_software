@@ -1,4 +1,5 @@
 testing_sequences/
 testing_sequences_YUV420/
 experiment/
+source/GFVC/
 *.pth.tar
