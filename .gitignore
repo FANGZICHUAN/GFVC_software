@@ -3,3 +3,4 @@ testing_sequences_YUV420/
 experiment/
 source/GFVC/
 *.pth.tar
+config_256/dataset_config_run_all*.yaml
