@@ -1,8 +1,8 @@
 codec_name: 'CFTE'             ## 'FV2V' OR 'FOMM' OR 'CFTE' ###You should choose which GFVC model to be used.
 
 #dataset params 
-dataset: 'VOXCELEB'
-num_frames: 125 # 125  frames for 'CFVQA'
+dataset: 'RAVDESS'
+num_frames: 100 # 125  frames for 'CFVQA'
 
 #video params   
 height: 256
@@ -10,7 +10,7 @@ width: 256
 iframe_format: 'YUV420'   ## 'YUV420'  OR 'RGB444' ###You need to define what color format to use for encoding the first frame.
 
 #codec params   
-inference_mode: 'encoder'           ## "Encoder" OR 'Decoder'   ###You need to define whether to encode or decode a sequence.
+inference_mode: 'decoder'           ## "Encoder" OR 'Decoder'   ###You need to define whether to encode or decode a sequence.
 qp_list: ["22", "32", "42", "52"]
 feature_coding_mode: 'AE' # AE or SEI
 ae_qf: [4,4] #Number of bins for KP coding
