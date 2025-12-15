@@ -12,11 +12,11 @@ def read_config_file(config_path):
 ############################Please Specify Your Configuration Here########################################
 
 #dataset params 
-RGB_SEQ_DIR = '/home/fangzichuan/gfvc_v1-AhG16_GFVC_Software_v6/testing_sequences/'  ###You should download the testing sequence and modify the dir.
-YUV_SEQ_DIR = '/home/fangzichuan/gfvc_v1-AhG16_GFVC_Software_v6/testing_sequences_YUV420/'
-DATASETS = ['CFVQA'] #
+RGB_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences/'  ###You should download the testing sequence and modify the dir.
+YUV_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences_YUV420/'
+DATASETS = ['VOXCELEB'] #
 SEQ_LIST = ['001' ,'002','003','004','005','006','007','008','009','010','011','012','013','014','015'] #,'016','017','018' ] #] #
-FEATURE_CODING_MODE = 'SEI' 
+FEATURE_CODING_MODE = 'AE' 
 
 ID = '_'+os.path.basename(__file__)[:-3] + '_'.join(DATASETS) + '_'.join(SEQ_LIST) 
 
