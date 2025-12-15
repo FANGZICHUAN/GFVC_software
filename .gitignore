@@ -4,3 +4,5 @@ experiment/
 source/GFVC/
 *.pth.tar
 config_256/dataset_config_run_all*.yaml
+tmux.txt
+Git操作指南
