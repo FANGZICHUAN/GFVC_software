@@ -6,7 +6,7 @@ import glob
 from tqdm import tqdm
 
 # 这一段是为了复用 calculate_psnr 和 calculate_ssim 函数
-# 我们直接把它们从 multiMetric_yuv420.py 搬过来，或者导入
+# 直接把它们从 multiMetric_yuv420.py 搬过来，或者导入
 # 为了脚本独立性，这里直接包含核心计算逻辑
 
 MAX_VALUE = 255 # 8-bit
@@ -101,7 +101,7 @@ if __name__ == "__main__":
     height = args['height']
     qplist = args['qp_list']
     dataset_name = args['dataset']
-    model_name = "VVC_Anchor" # 强制指定，因为我们知道 run_anchor.py 用的是这个名字
+    model_name = "VVC_Anchor" 
 
     # 路径配置 (必须与 run_anchor.py 一致)
     base_output_dir = f"../experiment/{model_name}/YUV420/{width}x{height}/"
