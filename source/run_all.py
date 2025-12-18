@@ -15,7 +15,7 @@ def read_config_file(config_path):
 RGB_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences/'  ###You should download the testing sequence and modify the dir.
 YUV_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences_YUV420/'
 DATASETS = ['RAVDESS'] #
-SEQ_LIST = ['005' ]#,'002','003','004','005','006','007','008','009','010','011','012','013','014','015'] #,'016','017','018' ] #] #
+SEQ_LIST = ['001','002','003','004','005','006','007','008','009','010','011','012','013','014','015','016','017','018','019','020' ] #] #
 FEATURE_CODING_MODE = 'AE' 
 
 ID = '_'+os.path.basename(__file__)[:-3] + '_'.join(DATASETS) + '_'.join(SEQ_LIST) 

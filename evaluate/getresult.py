@@ -6,7 +6,7 @@ import numpy as np
 
 # ================= 配置区域 =================
 Inputformat='Iframe_YUV420' # 'RGB444' OR 'YUV420'
-testingdata_name='CFVQA' # 'CFVQA' OR 'VOXCELEB'
+testingdata_name='RAVDESS' # 'CFVQA' OR 'VOXCELEB'
 Model='CFTE'             ## 'FV2V' OR 'FOMM' OR 'CFTE' 
 Metric = 'lpips' ## 'psnr' 'dists' 'lpips' 'ssim'
 
