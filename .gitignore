@@ -1,8 +1,7 @@
 testing_sequences/
 testing_sequences_YUV420/
 experiment/
-source/GFVC/
+source/GFVC/*/checkpoint/
 *.pth.tar
 config_256/dataset_config_run_all*.yaml
 tmux.txt
-Git操作指南
