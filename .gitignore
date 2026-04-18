@@ -5,3 +5,5 @@ source/GFVC/*/checkpoint/
 *.pth.tar
 config_256/dataset_config_run_all*.yaml
 tmux.txt
+__pycache__/
+*.pyc

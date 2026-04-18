@@ -132,7 +132,13 @@ if __name__ == "__main__":
     if translated:
         kp_decoder = get_inter_coder(encoder_type)(model_config_path=f'./GFVC/{encoder_type}/checkpoint/{encoder_type}.yaml' if encoder_type=='FV2V' else None , model_checkpoint_path=f'./GFVC/{encoder_type}/checkpoint/{encoder_type}-checkpoint.pth.tar' if encoder_type=='FV2V' else None, kp_output_dir=cf_input_path, device=device) # q_step must set as default for feature translation
     else:
-        kp_decoder = get_inter_coder(model_name)(model_config_path=f'./GFVC/{model_name}/checkpoint/{model_name}.yaml' if model_name=='FV2V' else None, model_checkpoint_path=f'./GFVC/{model_name}/checkpoint/{model_name}-checkpoint.pth.tar' if model_name=='FV2V' else None ,kp_output_dir=cf_input_path,q_step=q_step,device=device)
+        kp_decoder = get_inter_coder(model_name)(
+    model_config_path=f'./GFVC/{model_name}/checkpoint/{model_name}.yaml' if model_name in ['FV2V', 'TPSMM'] else None, 
+    model_checkpoint_path=f'./GFVC/{model_name}/checkpoint/{model_name}-checkpoint.pth.tar' if model_name in ['FV2V', 'TPSMM'] else None,
+    kp_output_dir=cf_input_path,
+    q_step=q_step,
+    device=device
+)
     #Reconstruction models
     inter_coder = get_inter_coder(model_name)(model_config_path, model_checkpoint_path, device=device)
     out_video = []

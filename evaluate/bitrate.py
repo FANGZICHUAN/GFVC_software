@@ -139,6 +139,7 @@ if __name__ == "__main__":
                     else:  ## Feature bitstream
                         if feature_coding_mode == 'AE':
                             interpath=input_bin_file_path+'/kp/'+testingdata_name+'_'+str(seq)+'_'+str(width)+'x'+str(height)+'_25fps_8bit_444_qp'+str(QP)+'/'+'frame'+frame_idx_str+'.bin'      
+
                             overall_bits=overall_bits+os.path.getsize(interpath)*8 
 
 

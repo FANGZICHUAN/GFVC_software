@@ -9,7 +9,7 @@ from GFVC.TPSMM.modules.inpainting_network import InpaintingNetwork
 from GFVC.TPSMM.modules.dense_motion import DenseMotionNetwork
 
 # 导入 GFVC 软件已有的特征量化与算术编解码模块
-from arithmetic.value_encoder import FastEnc
+from arithmetic.value_encoder import final_encoder_expgolomb
 from arithmetic.value_decoder import final_decoder_expgolomb, data_convert_inverse_expgolomb
 
 class TPSMMCoder:
@@ -63,7 +63,9 @@ class TPSMMCoder:
         return kp_value
 
     def get_kp_list(self, kp_dict, frame_idx, save=False):
-        """兼容接口：简单返回提取出的字典"""
+        """兼容接口：简单返回提取出的字典，并在 I 帧时顺便初始化参考状态"""
+        if frame_idx == 0:
+            self.kp_reference_(kp_dict) # 拦截 I 帧特征，补全 kp_decoder 的参考状态
         return kp_dict
 
     def predict_inter_frame(self, kp_inter, frame_idx):
@@ -80,52 +82,60 @@ class TPSMMCoder:
     # ---------------------------------------------------------------------------------
     # 特征量化与算术编码实现
     # ---------------------------------------------------------------------------------
+    # ---------------------------------------------------------------------------------
+    # 替换为极其稳定、绝对不会卡死、没有 Padding 垃圾的安全编解码方案
+    # ---------------------------------------------------------------------------------
     def encode_kp(self, kp_frame, frame_idx):
         """量化、计算残差并编码为二进制文件"""
         # 1. 提取当前帧浮点特征并量化
         current_kp_value = kp_frame['fg_kp']
         quantized_current_kp = torch.round(current_kp_value * self.q_step[0])
-        
-        # 2. 计算残差 (当前帧特征 - 参考帧特征)
+
+        # 2. 计算残差
         residual = quantized_current_kp - self.quantized_ref_kp
-        
-        # 3. 展平为一维整数列表，准备送入你代码里的算术编码器
-        residual_list = residual.flatten().int().cpu().numpy().tolist()
-        
-        # 4. 调用 GFVC 的 0阶指数哥伦布编码器
-        bin_path = os.path.join(self.kp_output_dir, str(frame_idx).zfill(4) + '.bin')
-        fast_enc = FastEnc()
-        fast_enc.exp_golomb_coder(residual_list, bin_path)
-        
+
+        # 3. 转成 list of ints
+        residual_list = residual.flatten().cpu().numpy().astype(np.int16).tolist()
+
+        # 4. 使用 Exp-Golomb 编码
+        bin_path = os.path.join(self.kp_output_dir, 'frame' + str(frame_idx).zfill(4) + '.bin')
+        final_encoder_expgolomb(residual_list, bin_path)
+
         # 计算文件大小 (比特数)
         kp_bits = os.path.getsize(bin_path) * 8
-        
+
         return kp_frame, kp_bits
 
     def decode_kp(self, frame_idx):
         """从二进制文件解码、反量化并恢复特征"""
+        if self.quantized_ref_kp is None:
+            if len(self.rec_sem) > 0:
+                self.kp_reference_(self.rec_sem[0])
+            else:
+                raise ValueError("参考帧特征未初始化，无法计算残差！")
+
+        # 1. 读取 .bin 文件并使用 Exp-Golomb 解码
         bin_path = os.path.join(self.kp_output_dir, str(frame_idx).zfill(4) + '.bin')
         
-        # 1. 读取二进制文件并解码出 0/1 序列
-        datares_rec = final_decoder_expgolomb(bin_path)
-        
-        # 2. 将 0/1 序列逆向转换为一维残差数值列表
-        residual_list = data_convert_inverse_expgolomb(datares_rec)
-        
-        # 3. 加上参考帧的量化特征，重建当前帧的量化特征
+        try:
+            kp_dec = final_decoder_expgolomb(bin_path)
+            residual_list = data_convert_inverse_expgolomb(kp_dec)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"找不到 {bin_path}，请确保你先使用最新的代码重新运行了编码器(encoder)！")
+            
         ref_kp_list = self.quantized_ref_kp.flatten().int().cpu().numpy().tolist()
-        reconstructed_quantized_list = np.array(ref_kp_list) + np.array(residual_list)
         
-        # 4. 恢复张量形状 (1, num_tps, 2)
+        # 2. 重建量化后的特征值
+        reconstructed_quantized_list = [ref + res for ref, res in zip(ref_kp_list, residual_list)]
+        
+        # 3. 恢复严格的张量形状 (1, 50, 2)
         num_tps = len(reconstructed_quantized_list) // 2
         reconstructed_tensor = torch.tensor(reconstructed_quantized_list).view(1, num_tps, 2).float().to(self.device)
         
-        # 5. 反量化 (除以 q_step) 恢复为浮点数
+        # 4. 反量化恢复浮点
         reconstructed_value = reconstructed_tensor / self.q_step[0]
         
-        # 封装回 TPS-MM 需要的字典格式
         dec_kp = {'fg_kp': reconstructed_value}
-        
         kp_bits = os.path.getsize(bin_path) * 8
         
         return dec_kp, kp_bits

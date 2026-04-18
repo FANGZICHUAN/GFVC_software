@@ -1,0 +1,41 @@
+# ==========================================
+# 1. 你的自定义忽略项 (基于现有规则)
+# ==========================================
+testing_sequences/
+testing_sequences_YUV420/
+experiment/
+source/GFVC/*/checkpoint/
+*.pth.tar
+config_256/dataset_config_run_all*.yaml
+tmux.txt
+
+# ==========================================
+# 2. Cline 专属降本优化 (忽略无法阅读且极耗 Token 的文件)
+# ==========================================
+# 预编译与缓存文件
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# 深度学习模型权重 (AI 无法通过纯文本读取这些文件)
+*.pt
+*.pth
+*.ckpt
+
+# 第三方 C++/C 编译产物 (源自你的 cpp_exts 文件夹)
+bin/
+*.o
+*.so
+build/
+dist/
+
+# 视频与图像临时测试数据
+*.yuv
+*.rgb
+*.mp4
+*.avi
+*.png
+*.jpg
+
+# 版本控制隐藏文件夹
+.git/
