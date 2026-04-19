@@ -332,6 +332,31 @@ class SEIEncoder:
             self.gfv_MatrixWidth = [1] * frames
             self.gfv_MatrixHeight = [12] * frames
 
+        elif self.model == 'TPSMM':
+            self.gfv_cnt = [i for i in range(frames)]
+            self.gfv_id = [1] * frames
+            self.gfv_DrivePicFusionFlag = [0] * frames
+            self.gfv_LowConfidenceFaceParameterFlag = [0] * frames
+            self.gfv_CoordinatePresentFlag = [1] * frames
+            self.gfv_CoordinateQuantizationFactor = [coordinate_Qstep] * frames
+            self.gfv_CoordinatePredFlag = [0] + [1]* (frames-1)
+            self.gfv_oordinatePointNum = [50] * frames
+            self.gfv_3DCoordinateFlag = [0] * frames
+            self.gfv_ZCoordinateMaxValue=[0] * frames
+            self.gfv_ZCoordinate=[0] * frames
+            self.gfv_MatrixPresentFlag = [0] * frames
+            self.gfv_MatrixElementPrecisionFactor= [0] * frames
+            self.gfv_MatrixPredFlag = [0] * frames
+            self.gfv_NumMatrixType = [0] * frames
+            self.gfv_MatrixTypeIdx = [0] * frames
+            self.gfv_NumMatricestoNumKpsFlag = [0] * frames
+            self.gfv_NumMatricesInfo = [0] * frames
+            self.gfv_Matrix3DSpaceFlag = [0] * frames
+            self.gfv_NumMatrices = [0] * frames
+            self.gfv_MatrixWidth = [0] * frames
+            self.gfv_MatrixHeight = [0] * frames
+            self.gfv_MatrixElement = [0] * frames
+
     def update(self,kp_value):
         if self.model == 'CFTE' or self.model == 'CFTE_Lightweight':
             self.gfv_MatrixElement.append(kp_value)    
@@ -351,6 +376,10 @@ class SEIEncoder:
             self.gfv_YCoordinate.append(exp_frame[1::3])
             self.gfv_ZCoordinate.append(exp_frame[2::3])
             self.gfv_MatrixElement.append(rot_t_frame)
+        elif self.model == 'TPSMM':
+            kp_flat = kp_value['fg_kp'].flatten().cpu().numpy().tolist()
+            self.gfv_XCoordinate.append(kp_flat[::2])
+            self.gfv_YCoordinate.append(kp_flat[1::2])
 
 
         
@@ -791,6 +820,36 @@ def sei_decode(f, model, device):
         dict['exp']=kp_exp_value_current  
         kp_value=dict    
 
+    elif model == 'TPSMM':
+        reference_driving_coordinate_x=[]
+        reference_driving_coordinate_y=[]
+        
+        lines = f.readlines()
+        for line in lines:
+            line = line.strip()
 
+            if 'gfv_coordinate_Xtensor:' in line:
+                reference_driving_coordinate_vector_x=line.strip('gfv_coordinate_Xtensor: ')
+                reference_driving_coordinate_x.append(reference_driving_coordinate_vector_x.replace(" ",","))
+
+            if 'gfv_coordinate_Ytensor:' in line:
+                reference_driving_coordinate_vector_y=line.strip('gfv_coordinate_Ytensor: ')
+                reference_driving_coordinate_y.append(reference_driving_coordinate_vector_y.replace(" ",","))
+
+        coordinate_vector_x=str(reference_driving_coordinate_x).replace("'",'')
+        coordinate_vector_x=eval('[%s]'%repr(coordinate_vector_x).replace('[', '').replace(']', '').replace("'", ""))  
+        coordinate_vector_x=(np.array(coordinate_vector_x)).tolist()               
+
+        coordinate_vector_y=str(reference_driving_coordinate_y).replace("'",'')
+        coordinate_vector_y=eval('[%s]'%repr(coordinate_vector_y).replace('[', '').replace(']', '').replace("'", ""))  
+        coordinate_vector_y=(np.array(coordinate_vector_y)).tolist()                
+
+        coordinate_vector = [item for pair in zip(coordinate_vector_x, coordinate_vector_y) for item in pair]
+        f.close()
+
+        kp_value_tensor=torch.Tensor(coordinate_vector).view(1, -1, 2).to(device)
+        dict={}
+        dict['fg_kp']=kp_value_tensor   
+        kp_value=dict
 
     return kp_value

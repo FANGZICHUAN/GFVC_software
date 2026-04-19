@@ -46,7 +46,7 @@ if __name__ == "__main__":
     frames=int(opt.encoding_frames)
     #Input Frame dimensions
     width=opt.seq_width
-    height=opt.seq_width
+    height=opt.seq_height
     #Feature quantization factor for arithmetic coding
     q_step = list(map(int, opt.ae_qf))
     #Reference frame QP
@@ -262,20 +262,19 @@ if __name__ == "__main__":
         if iframe_format=='RGB444':
             
             ## Base Picture with Base matric reference
-            f_temp=open(dec_output_path+'allframe_org_dec.rgb','rb')
-            img_rec=np.fromfile(f_temp,np.uint8,3*height*width).reshape((3,height,width))   # 3xHxW RGB         
-            img_rec = img_rec.transpose(2, 0, 1) 
-            out_video.append(img_rec) 
+            f_temp=open(ref_input_path+'allframe_org_dec.rgb','rb')
+            img_rec=np.fromfile(f_temp,np.uint8,3*height*width).reshape((3,height,width))   # 3xHxW RGB
+            out_video.append(img_rec)
         elif iframe_format=='YUV420':
-            rec_ref_yuv=yuv420_to_rgb444(ref_input_path+'allframe_org_dec.yuv', width, height, 0, 1, False, False) 
+            rec_ref_yuv=yuv420_to_rgb444(ref_input_path+'allframe_org_dec.yuv', width, height, 0, 1, False, False)
             img_rec = rec_ref_yuv[0]
-            out_video.append(img_rec) 
-            img_rec = img_rec.transpose(2, 0, 1)    # HxWx3
-        img_rec.tofile(f_dec) 
-        img_rec = resize(img_rec, (3, height, width))    # normlize to 0-1                                      
-        with torch.no_grad(): 
+            out_video.append(img_rec)
+            img_rec = img_rec.transpose(2, 0, 1)    # HxWx3 -> 3xHxW
+        img_rec.tofile(f_dec)
+        img_rec = resize(img_rec, (3, height, width))    # normlize to 0-1
+        with torch.no_grad():
             reference = torch.tensor(img_rec[np.newaxis]).float() #.astype(np.float32)
-            reference = reference.cuda()    # require GPU
+            reference = reference.to(device)    # use configured device
             inter_coder.reference_frame_(reference)
             ref_kp_value = inter_coder.analysis_model(reference) 
             inter_coder.kp_reference_(ref_kp_value)   

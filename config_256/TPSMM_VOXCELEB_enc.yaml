@@ -12,10 +12,10 @@ iframe_format: 'YUV420'
 #codec params   
 inference_mode: 'encoder'
 qp_list: ["42"]
-feature_coding_mode: 'AE'
+feature_coding_mode: 'SEI'
 ae_qf: [128,128]
-sei_coordinate_qf: 4
-sei_matrix_qf: 4 
+sei_coordinate_qf: 8
+sei_matrix_qf: 4
 encoder_type: 'TPSMM'
 no_analysis_in_decoder: 'OFF' 
 color_calibration: 'OFF'

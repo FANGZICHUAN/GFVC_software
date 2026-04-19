@@ -17,7 +17,20 @@ class TPSMMCoder:
         self.device = device
         self.q_step = q_step if q_step is not None else [128] # TPS-MM特征值通常在[-1, 1]之间，128是一个合理的初始缩放倍数
         self.kp_output_dir = kp_output_dir
-        
+
+        # 内部状态变量
+        self.reference = None
+        self.kp_reference = None
+        self.quantized_ref_kp = None # 保存量化后的参考帧关键点，用于计算残差
+        self.rec_sem = []
+
+        # 当 model_config_path 为 None 时，跳过网络初始化（仅用于特征解码的轻量实例）
+        if model_config_path is None:
+            self.kp_extractor = None
+            self.dense_motion_network = None
+            self.inpainting_network = None
+            return
+
         # 1. 读取 TPS-MM 配置文件
         with open(model_config_path) as f:
             config = yaml.safe_load(f)
@@ -39,12 +52,6 @@ class TPSMMCoder:
         self.kp_extractor.eval()
         self.dense_motion_network.eval()
         self.inpainting_network.eval()
-
-        # 内部状态变量
-        self.reference = None
-        self.kp_reference = None
-        self.quantized_ref_kp = None # 保存量化后的参考帧关键点，用于计算残差
-        self.rec_sem = []
 
     def reference_frame_(self, reference):
         """保存 I 帧作为参考"""
@@ -115,7 +122,7 @@ class TPSMMCoder:
                 raise ValueError("参考帧特征未初始化，无法计算残差！")
 
         # 1. 读取 .bin 文件并使用 Exp-Golomb 解码
-        bin_path = os.path.join(self.kp_output_dir, str(frame_idx).zfill(4) + '.bin')
+        bin_path = os.path.join(self.kp_output_dir, 'frame' + str(frame_idx).zfill(4) + '.bin')
         
         try:
             kp_dec = final_decoder_expgolomb(bin_path)

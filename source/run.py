@@ -66,7 +66,7 @@ if __name__ == "__main__":
                     if coding_mode == 'decoder':
                         cmd_blqp = cmd_blqp + encoder_type+ " "+str(color_calibration) +" "
                     os.system(cmd_blqp) 
-                    if model_name in ['CFTE','FV2V','FOMM', 'DAC']:    
+                    if model_name in ['CFTE','FV2V','FOMM', 'DAC', 'TPSMM']:    
                         print(model_name+"_"+coding_mode+"_"+testingdata_name+"_"+seq+"_QP"+str(qp)+" Finished")
                     elif model_name in ['HDAC', 'HDAC_Extension']:
                         print(model_name+"_"+coding_mode+"_"+testingdata_name+"_"+seq+"_Keyframe QP"+str(qp)+"_Base_layer_QP_"+str(blqp)+" Finished")

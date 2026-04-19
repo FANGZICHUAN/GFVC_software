@@ -43,7 +43,7 @@ if __name__ == "__main__":
     #SourceWidth
     width = opt.seq_width 
     #SourceHeight
-    height = opt.seq_width 
+    height = opt.seq_height
     #Feature quantization factor for arithmetic coding
     q_step = list(map(int, opt.ae_qf))
 
@@ -181,9 +181,9 @@ if __name__ == "__main__":
             interframe = cv2.merge([listR[frame_idx],listG[frame_idx],listB[frame_idx]])
             interframe = resize(interframe, (width, height))[..., :3]
 
-            with torch.no_grad(): 
+            with torch.no_grad():
                 interframe = torch.tensor(interframe[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)
-                interframe = interframe.cuda()    # require GPU                  
+                interframe = interframe.to(device)    # use configured device
 
                 ###extraction
                 kp_interframe = inter_coder.analysis_model(interframe) ################

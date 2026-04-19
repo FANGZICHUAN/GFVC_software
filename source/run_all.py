@@ -16,7 +16,7 @@ RGB_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences/'  ###You shoul
 YUV_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences_YUV420/'
 DATASETS = ['VOXCELEB'] #
 SEQ_LIST = ['001','002','003','004','005','006','007','008','009','010','011','012','013','014','015'] #,'016','017','018','019','020' ] #] #
-FEATURE_CODING_MODE = 'AE' 
+FEATURE_CODING_MODE = 'SEI' 
 
 ID = '_'+os.path.basename(__file__)[:-3] + '_'.join(DATASETS) + '_'.join(SEQ_LIST) 
 
@@ -35,7 +35,7 @@ RGB2YUV = True
 EVAL_RGB = True
 EVAL_YUV = True
 SUMMARY_RESULTS = True
-TRANSLATED = True
+TRANSLATED = False
 ###Please specify encoder type in decoder config files if you want to execute the translated model.
 if not TRANSLATED:
     DECODER_MODELS = MODELS
