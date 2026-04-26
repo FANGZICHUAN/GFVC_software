@@ -126,7 +126,7 @@ if __name__ == "__main__":
             # 如果找不到，尝试去原始数据集找 (备选方案)
             if not os.path.exists(original_yuv):
                 # 假设命名格式
-                original_yuv = args['yuv_sequence_dir'] + f"{dataset_name}_{seq}_{width}x{height}_25_8bit_420.yuv"
+                original_yuv = os.path.join(args['yuv_sequence_dir'], f"{dataset_name}_{seq}_{width}x{height}_25_8bit_420.yuv")
             
             # 2. 寻找解码文件 (Reconstructed)
             decoded_yuv = os.path.join(dec_dir, f"{dataset_name}_{seq}_{width}x{height}_25fps_8bit_420_qp{qp}.yuv")
