@@ -114,6 +114,9 @@ if __name__ == "__main__":
         total_result.update({f"totalResult_{m.upper()}": np.zeros((len(seqlist)+1,len(qp_iter)))})
 
     for seq in tqdm(seqlist):
+        # 每个新序列开始时重置时间相关指标
+        monitor.reset_temporal_metrics()
+        
         qpIdx=0
         for qp in tqdm(qp_iter):
             start=time.time()    

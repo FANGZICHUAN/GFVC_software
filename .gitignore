@@ -4,8 +4,7 @@ experiment/
 source/GFVC/*/checkpoint/
 *.pth.tar
 tmux.txt
-__pycache__/
+**/__pycache__/
 *.pyc
 config_256/*.yaml
 source/run_all.py
-source/GFVC/__pycache__
