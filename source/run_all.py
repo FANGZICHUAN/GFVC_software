@@ -25,8 +25,8 @@ PATH_TO_SOURCE = os.path.abspath('.')
 PATH_TO_EVAL = os.path.abspath('../evaluate')
 CONFIG = 'config_256'
 
-MODELS = ['FV2V']#,'CFTE','DAC']#, ,'DAC','HDAC','HDAC_Extension'] 'FV2V','FOMM',
-DECODER_MODELS = ['FV2V']#,'CFTE','DAC']#,'DAC','HDAC','HDAC_Extension','DAC'] 'FV2V',  'FOMM',
+MODELS = ['TPSMM']#,'CFTE','DAC']#, ,'DAC','HDAC','HDAC_Extension'] 'FV2V','FOMM',
+DECODER_MODELS = ['TPSMM']#,'CFTE','DAC']#,'DAC','HDAC','HDAC_Extension','DAC'] 'FV2V',  'FOMM',
 
 ENCODE = True
 DECODE = True
