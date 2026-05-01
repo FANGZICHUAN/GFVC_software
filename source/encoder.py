@@ -233,3 +233,8 @@ if __name__ == "__main__":
     else:
         raise ValueError('Invalid feature coding mode. Please select either AE or SEI')
 
+    # Clear CUDA cache to prevent memory issues in subsequent iterations
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
+

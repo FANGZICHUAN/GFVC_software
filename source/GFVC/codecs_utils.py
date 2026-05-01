@@ -712,18 +712,18 @@ def sei_decode(f, model, device):
         reference_driving_string=[]
         reference_driving_coordinate_x=[]
         reference_driving_coordinate_y=[]
-        
-        lines = f.readlines()  
+
+        lines = f.readlines()
         for line in lines:
             line = line.strip()
 
-                
+
             if 'gfv_coordinate_Xtensor:' in line:
-                reference_driving_coordinate_vector_x=line.strip('gfv_coordinate_Xtensor: ')  
+                reference_driving_coordinate_vector_x=line.strip('gfv_coordinate_Xtensor: ')
                 reference_driving_coordinate_x.append(reference_driving_coordinate_vector_x.replace(" ",","))
 
             if 'gfv_coordinate_Ytensor:' in line:
-                reference_driving_coordinate_vector_y=line.strip('gfv_coordinate_Ytensor: ')                          
+                reference_driving_coordinate_vector_y=line.strip('gfv_coordinate_Ytensor: ')
                 reference_driving_coordinate_y.append(reference_driving_coordinate_vector_y.replace(" ",","))
 
 

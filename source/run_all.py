@@ -25,8 +25,8 @@ PATH_TO_SOURCE = os.path.abspath('.')
 PATH_TO_EVAL = os.path.abspath('../evaluate')
 CONFIG = 'config_256'
 
-MODELS = ['TPSMM']#,'CFTE','DAC']#, ,'DAC','HDAC','HDAC_Extension'] 'FV2V','FOMM',
-DECODER_MODELS = ['TPSMM']#,'CFTE','DAC']#,'DAC','HDAC','HDAC_Extension','DAC'] 'FV2V',  'FOMM',
+MODELS = ['TPSMM','CFTE','FV2V'] #,'HDAC','MRDAC']#, ,'DAC','HDAC_Extension'] 'FV2V','FOMM',
+DECODER_MODELS = ['TPSMM','CFTE','FV2V'] #,'HDAC','MRDAC']#,'DAC','HDAC_Extension','DAC'] 'FV2V',  'FOMM',
 
 ENCODE = True
 DECODE = True
@@ -66,7 +66,13 @@ if DECODE:
     for dataset in DATASETS:
         for model in DECODER_MODELS:
             config_path = '../'+CONFIG+'/'+model+"_"+dataset+"_dec.yaml"
-            os.system("python run.py --config "+ config_path + ' --dataset_config '+dataset_config_path)
+            decoder_dataset_config_path = '../'+CONFIG+'/dataset_config_decoder_'+model+'_'+ID+'.yaml'
+            decoder_config = dataset_config.copy()
+            decoder_config['encoder_type'] = model
+            with open(decoder_dataset_config_path, "w") as f:
+                yaml.dump(decoder_config, f)
+            os.system("python run.py --config "+ config_path + ' --dataset_config '+decoder_dataset_config_path)
+            os.remove(decoder_dataset_config_path)
 
 os.chdir(PATH_TO_EVAL)
 if EVALUATE:
@@ -77,19 +83,37 @@ if EVALUATE:
         for dataset in DATASETS:
             for model in DECODER_MODELS:
                 config_path = '../'+CONFIG+'/'+model+"_"+dataset+"_dec.yaml"
-                os.system("python rgb444_to_yuv420.py --config "+ config_path + ' --dataset_config '+dataset_config_path)
+                decoder_dataset_config_path = '../'+CONFIG+'/dataset_config_decoder_'+model+'_'+ID+'.yaml'
+                decoder_config = dataset_config.copy()
+                decoder_config['encoder_type'] = model
+                with open(decoder_dataset_config_path, "w") as f:
+                    yaml.dump(decoder_config, f)
+                os.system("python rgb444_to_yuv420.py --config "+ config_path + ' --dataset_config '+decoder_dataset_config_path)
+                os.remove(decoder_dataset_config_path)
     if EVAL_RGB:
         print('RGB quality evaluation........')
         for dataset in DATASETS:
             for model in DECODER_MODELS:
                 config_path = '../'+CONFIG+'/'+model+"_"+dataset+"_dec.yaml"
-                os.system("python metrics.py --config "+ config_path + ' --dataset_config '+dataset_config_path)
+                decoder_dataset_config_path = '../'+CONFIG+'/dataset_config_decoder_'+model+'_'+ID+'.yaml'
+                decoder_config = dataset_config.copy()
+                decoder_config['encoder_type'] = model
+                with open(decoder_dataset_config_path, "w") as f:
+                    yaml.dump(decoder_config, f)
+                os.system("python metrics.py --config "+ config_path + ' --dataset_config '+decoder_dataset_config_path)
+                os.remove(decoder_dataset_config_path)
     if EVAL_YUV:
         print('YUV quality evaluation........')
         for dataset in DATASETS:
             for model in DECODER_MODELS:
                 config_path = '../'+CONFIG+'/'+model+"_"+dataset+"_dec.yaml"
-                os.system("python multiMetric_yuv420.py --config "+ config_path + ' --dataset_config '+dataset_config_path)
+                decoder_dataset_config_path = '../'+CONFIG+'/dataset_config_decoder_'+model+'_'+ID+'.yaml'
+                decoder_config = dataset_config.copy()
+                decoder_config['encoder_type'] = model
+                with open(decoder_dataset_config_path, "w") as f:
+                    yaml.dump(decoder_config, f)
+                os.system("python multiMetric_yuv420.py --config "+ config_path + ' --dataset_config '+decoder_dataset_config_path)
+                os.remove(decoder_dataset_config_path)
 
 if SUMMARY_RESULTS:
     print('Summarizing evaluation results')

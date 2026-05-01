@@ -6,5 +6,5 @@ source/GFVC/*/checkpoint/
 tmux.txt
 **/__pycache__/
 *.pyc
-config_256/*.yaml
-source/run_all.py
+CLAUDE.md
+claude.sh

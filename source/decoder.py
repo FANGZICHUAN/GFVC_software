@@ -293,8 +293,13 @@ if __name__ == "__main__":
         print(f'Decoding time: {total_decoding_time:.2f}s')  
              
     else:
-        raise ValueError('Invalid feature coding mode. Please select either AE or SEI')     
-     
+        raise ValueError('Invalid feature coding mode. Please select either AE or SEI')
+
     imageio.mimsave(output_video_mp4,out_video, fps=25.0)
+
+    # Clear CUDA cache to prevent memory issues in subsequent iterations
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
 
 

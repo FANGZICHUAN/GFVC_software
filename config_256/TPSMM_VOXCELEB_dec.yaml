@@ -11,7 +11,7 @@ iframe_format: 'YUV420'
 
 #codec params   
 inference_mode: 'decoder'
-qp_list: ["12"]
+qp_list: ["12","22","32","42"]
 feature_coding_mode: 'SEI'
 ae_qf: [128,128]
 sei_coordinate_qf: 8
