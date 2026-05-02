@@ -1,6 +1,7 @@
 import sys
 import os
 import time
+import subprocess
 import yaml 
 
 def read_config_file(config_path):
@@ -8,6 +9,40 @@ def read_config_file(config_path):
     with open(config_path) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
     return config
+
+
+def run_stage(command, stage_name):
+    env = os.environ.copy()
+    env['TQDM_DISABLE'] = '1'
+    result = subprocess.run(
+        command,
+        shell=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    combined_output = (result.stdout or '') + '\n' + (result.stderr or '')
+    key_lines = []
+    for line in combined_output.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if any(token in stripped for token in ['success', 'Done!', 'Encoding time', 'Decoding time', 'loaded successfully']):
+            key_lines.append(stripped)
+
+    if result.returncode != 0:
+        print(f'[FAIL] {stage_name}')
+        tail = [l for l in combined_output.splitlines() if l.strip()][-20:]
+        if tail:
+            print('\n'.join(tail))
+        raise RuntimeError(f'Stage failed: {stage_name}')
+
+    if key_lines:
+        print(f'[OK] {stage_name}')
+        print('\n'.join(key_lines[-5:]))
+    else:
+        print(f'[OK] {stage_name}')
 
 ############################Please Specify Your Configuration Here########################################
 
@@ -25,8 +60,8 @@ PATH_TO_SOURCE = os.path.abspath('.')
 PATH_TO_EVAL = os.path.abspath('../evaluate')
 CONFIG = 'config_256'
 
-MODELS = ['TPSMM','CFTE','FV2V'] #,'HDAC','MRDAC']#, ,'DAC','HDAC_Extension'] 'FV2V','FOMM',
-DECODER_MODELS = ['TPSMM','CFTE','FV2V'] #,'HDAC','MRDAC']#,'DAC','HDAC_Extension','DAC'] 'FV2V',  'FOMM',
+MODELS = ['LivePortrait'] #,'CFTE','FV2V','TPSMM'] #,'HDAC','MRDAC']#, ,'DAC','HDAC_Extension'] 'FV2V','FOMM',
+DECODER_MODELS = ['LivePortrait'] #,'CFTE','FV2V','TPSMM'] #,'HDAC','MRDAC']#,'DAC','HDAC_Extension','DAC'] 'FV2V',  'FOMM',
 
 ENCODE = True
 DECODE = True
@@ -60,7 +95,7 @@ if ENCODE:
     for dataset in DATASETS:
         for model in MODELS:
             config_path = '../'+CONFIG+'/'+model+"_"+dataset+"_enc.yaml"
-            os.system("python run.py --config "+ config_path + ' --dataset_config '+dataset_config_path)
+            run_stage("python run.py --config "+ config_path + ' --dataset_config '+dataset_config_path, f'Encode {model} {dataset}')
 if DECODE:
     print('Decoding........')
     for dataset in DATASETS:
@@ -71,7 +106,7 @@ if DECODE:
             decoder_config['encoder_type'] = model
             with open(decoder_dataset_config_path, "w") as f:
                 yaml.dump(decoder_config, f)
-            os.system("python run.py --config "+ config_path + ' --dataset_config '+decoder_dataset_config_path)
+            run_stage("python run.py --config "+ config_path + ' --dataset_config '+decoder_dataset_config_path, f'Decode {model} {dataset}')
             os.remove(decoder_dataset_config_path)
 
 os.chdir(PATH_TO_EVAL)
@@ -88,7 +123,7 @@ if EVALUATE:
                 decoder_config['encoder_type'] = model
                 with open(decoder_dataset_config_path, "w") as f:
                     yaml.dump(decoder_config, f)
-                os.system("python rgb444_to_yuv420.py --config "+ config_path + ' --dataset_config '+decoder_dataset_config_path)
+                run_stage("python rgb444_to_yuv420.py --config "+ config_path + ' --dataset_config '+decoder_dataset_config_path, f'RGB2YUV {model} {dataset}')
                 os.remove(decoder_dataset_config_path)
     if EVAL_RGB:
         print('RGB quality evaluation........')
@@ -100,7 +135,7 @@ if EVALUATE:
                 decoder_config['encoder_type'] = model
                 with open(decoder_dataset_config_path, "w") as f:
                     yaml.dump(decoder_config, f)
-                os.system("python metrics.py --config "+ config_path + ' --dataset_config '+decoder_dataset_config_path)
+                run_stage("python metrics.py --config "+ config_path + ' --dataset_config '+decoder_dataset_config_path, f'RGB Eval {model} {dataset}')
                 os.remove(decoder_dataset_config_path)
     if EVAL_YUV:
         print('YUV quality evaluation........')
@@ -112,7 +147,7 @@ if EVALUATE:
                 decoder_config['encoder_type'] = model
                 with open(decoder_dataset_config_path, "w") as f:
                     yaml.dump(decoder_config, f)
-                os.system("python multiMetric_yuv420.py --config "+ config_path + ' --dataset_config '+decoder_dataset_config_path)
+                run_stage("python multiMetric_yuv420.py --config "+ config_path + ' --dataset_config '+decoder_dataset_config_path, f'YUV Eval {model} {dataset}')
                 os.remove(decoder_dataset_config_path)
 
 if SUMMARY_RESULTS:
@@ -120,7 +155,7 @@ if SUMMARY_RESULTS:
     for dataset in DATASETS:
         for model in MODELS:
             config_path = '../'+CONFIG+'/'+model+"_"+dataset+"_enc.yaml"
-            os.system("python bitrate.py --config "+ config_path + ' --dataset_config '+dataset_config_path)
+            run_stage("python bitrate.py --config "+ config_path + ' --dataset_config '+dataset_config_path, f'Bitrate {model} {dataset}')
     tim = time.localtime()
     
     

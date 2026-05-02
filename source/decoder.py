@@ -122,7 +122,11 @@ if __name__ == "__main__":
         output_video_mp4 =dec_output_path+seq+'_qp'+str(qp)+'.mp4'
     
     model_config_path = f'./GFVC/{model_name}/checkpoint/{model_name}.yaml'
-    model_checkpoint_path = f'./GFVC/{model_name}/checkpoint/{model_name}-checkpoint.pth.tar'     
+    # LivePortrait uses 4 separate .pth files in checkpoint directory
+    if model_name == 'LivePortrait':
+        model_checkpoint_path = f'./GFVC/{model_name}/checkpoint/'
+    else:
+        model_checkpoint_path = f'./GFVC/{model_name}/checkpoint/{model_name}-checkpoint.pth.tar'     
     f_dec=open(output_video_rgb,'w') 
     ################################################################################################################################################################################
     #######Codec and data preparation###############################################################################################################################################
@@ -130,11 +134,25 @@ if __name__ == "__main__":
     ref_decoder = RefereceImageDecoder(ref_input_path,qp,width=width,height=height,dec_name='vtm')
     # Keypoint Decoder
     if translated:
-        kp_decoder = get_inter_coder(encoder_type)(model_config_path=f'./GFVC/{encoder_type}/checkpoint/{encoder_type}.yaml' if encoder_type=='FV2V' else None , model_checkpoint_path=f'./GFVC/{encoder_type}/checkpoint/{encoder_type}-checkpoint.pth.tar' if encoder_type=='FV2V' else None, kp_output_dir=cf_input_path, device=device) # q_step must set as default for feature translation
+        # For feature translation, use directory path for LivePortrait
+        if encoder_type == 'LivePortrait':
+            enc_checkpoint_path = f'./GFVC/{encoder_type}/checkpoint/'
+        elif encoder_type=='FV2V':
+            enc_checkpoint_path = f'./GFVC/{encoder_type}/checkpoint/{encoder_type}-checkpoint.pth.tar'
+        else:
+            enc_checkpoint_path = None
+        kp_decoder = get_inter_coder(encoder_type)(model_config_path=f'./GFVC/{encoder_type}/checkpoint/{encoder_type}.yaml' if encoder_type in ['FV2V', 'LivePortrait'] else None , model_checkpoint_path=enc_checkpoint_path, kp_output_dir=cf_input_path, device=device) # q_step must set as default for feature translation
     else:
+        # For direct decoding, use directory path for LivePortrait
+        if model_name == 'LivePortrait':
+            dec_checkpoint_path = f'./GFVC/{model_name}/checkpoint/'
+        elif model_name in ['FV2V', 'TPSMM']:
+            dec_checkpoint_path = f'./GFVC/{model_name}/checkpoint/{model_name}-checkpoint.pth.tar'
+        else:
+            dec_checkpoint_path = None
         kp_decoder = get_inter_coder(model_name)(
-    model_config_path=f'./GFVC/{model_name}/checkpoint/{model_name}.yaml' if model_name in ['FV2V', 'TPSMM'] else None, 
-    model_checkpoint_path=f'./GFVC/{model_name}/checkpoint/{model_name}-checkpoint.pth.tar' if model_name in ['FV2V', 'TPSMM'] else None,
+    model_config_path=f'./GFVC/{model_name}/checkpoint/{model_name}.yaml' if model_name in ['FV2V', 'TPSMM', 'LivePortrait'] else None, 
+    model_checkpoint_path=dec_checkpoint_path,
     kp_output_dir=cf_input_path,
     q_step=q_step,
     device=device
@@ -232,10 +250,14 @@ if __name__ == "__main__":
                         predicted_frame = (predicted_frame_normalized * std_ref + mean_ref).clamp(0, 1)
                                     
                     pred = tensor2frame(predicted_frame)
-                    #Save to output file
-                    pred.tofile(f_dec)             
-                    #HxWx3 format
-                    out_video.append(np.transpose(pred,[1,2,0]))  
+                    pred_hwc = np.transpose(pred, [1, 2, 0])
+                    if pred_hwc.shape[0] != height or pred_hwc.shape[1] != width:
+                        pred_hwc = resize(pred_hwc, (height, width), preserve_range=True, anti_aliasing=True).astype(np.uint8)
+                    pred_chw = np.transpose(pred_hwc, [2, 0, 1])
+                    # Save to output file (3xHxW RGB444)
+                    pred_chw.tofile(f_dec)
+                    # Keep out_video as HxWx3 for imageio
+                    out_video.append(pred_hwc)
         total_decoding_time = time.time() - decoding_start_time
         print(f'Decoding time: {total_decoding_time:.2f}s, I-frame decoding time: {Iframe_decoding_time:.2f}s, p-frame decoding time: {(total_decoding_time-Iframe_decoding_time):.2f}s')
 
@@ -264,7 +286,7 @@ if __name__ == "__main__":
             ## Base Picture with Base matric reference
             f_temp=open(ref_input_path+'allframe_org_dec.rgb','rb')
             img_rec=np.fromfile(f_temp,np.uint8,3*height*width).reshape((3,height,width))   # 3xHxW RGB
-            out_video.append(img_rec)
+            out_video.append(np.transpose(img_rec, [1, 2, 0]))
         elif iframe_format=='YUV420':
             rec_ref_yuv=yuv420_to_rgb444(ref_input_path+'allframe_org_dec.yuv', width, height, 0, 1, False, False)
             img_rec = rec_ref_yuv[0]
@@ -276,16 +298,22 @@ if __name__ == "__main__":
             reference = torch.tensor(img_rec[np.newaxis]).float() #.astype(np.float32)
             reference = reference.to(device)    # use configured device
             inter_coder.reference_frame_(reference)
-            ref_kp_value = inter_coder.analysis_model(reference) 
-            inter_coder.kp_reference_(ref_kp_value)   
-            
+            # Use SEI parameters for reference frame (gfv_0.txt) instead of re-extracting from decoded frame
+            # This ensures consistency between reference and inter frames
+            ref_kp_value = sei_decode(open(dir_outSEI+'gfv_0.txt', 'r', encoding='utf-8'), model_name, device)
+            inter_coder.kp_reference_(ref_kp_value)
+
             for frame in range(1,frames):
                 kp_value = sei_decode(open(dir_outSEI+'gfv_'+str(frame)+'.txt', 'r', encoding='utf-8'), model_name ,device)
                 # print(kp_value)
                 prediction = inter_coder.predict_inter_frame(kp_value, frame)  #######################
                 pred = tensor2frame(prediction)
-                out_video.append(np.transpose(pred,[1,2,0])) 
-                pred.tofile(f_dec)                        
+                pred_hwc = np.transpose(pred, [1, 2, 0])
+                if pred_hwc.shape[0] != height or pred_hwc.shape[1] != width:
+                    pred_hwc = resize(pred_hwc, (height, width), preserve_range=True, anti_aliasing=True).astype(np.uint8)
+                pred_chw = np.transpose(pred_hwc, [2, 0, 1])
+                out_video.append(pred_hwc)
+                pred_chw.tofile(f_dec)
         ###
         bin_save=ref_input_path+'allframe_org.bin'
         f_dec.close()     

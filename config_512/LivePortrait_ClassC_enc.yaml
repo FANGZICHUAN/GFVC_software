@@ -1,0 +1,29 @@
+codec_name: 'LivePortrait'
+
+#dataset params 
+dataset: 'ClassC'
+num_frames: 250
+
+#video params   
+height: 512
+width: 512
+iframe_format: 'YUV420'
+
+#codec params   
+inference_mode: 'encoder'
+qp_list: ["22", "32", "42", "52"]
+feature_coding_mode: 'AE'
+ae_qf: [256,256]
+sei_coordinate_qf: 12
+sei_matrix_qf: 12
+encoder_type: 'LivePortrait'
+no_analysis_in_decoder: 'OFF' 
+color_calibration: 'OFF'
+
+# Stay 'OFF' for LivePortrait
+base_layer_params:
+  use_base_layer: 'OFF'
+  qp: [0] 
+
+#evaluation params
+metrics: ['dists','lpips','psnr', 'ssim']

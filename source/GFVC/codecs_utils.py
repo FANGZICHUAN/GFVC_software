@@ -8,6 +8,7 @@ from GFVC.FOMM_utils import *
 from GFVC.FV2V_utils import *
 from GFVC.HDAC_utils import *
 from GFVC.TPSMM.tpsmm_coder import TPSMMCoder
+from GFVC.LivePortrait.liveportrait_coder import LivePortraitCoder
 from GFVC.Translator import Paramtranscoder
 
 
@@ -28,6 +29,8 @@ def get_inter_coder(model_name):
         return HDAC_Extension
     elif model_name == 'TPSMM':
         return TPSMMCoder
+    elif model_name == 'LivePortrait':
+        return LivePortraitCoder
     else:
         raise NotImplementedError(f"Model {model_name} not implemented")
 
@@ -357,6 +360,40 @@ class SEIEncoder:
             self.gfv_MatrixHeight = [0] * frames
             self.gfv_MatrixElement = [0] * frames
 
+        elif self.model == 'LivePortrait':
+            # LivePortrait: 21 3D keypoints + 21 expression + scale + translation = 21*3*2 + 1 + 3 = 130 parameters
+            # For SEI: X,Y coordinates in Coordinate field, Z coordinates in Matrix field (workaround for VVC bug)
+            #  - Coordinate: 44 2D points (X,Y only)
+            #  - Matrix: 44 Z values (1x44 matrix)
+            # NOTE: Disable prediction (all pred_flag=0) to use absolute coordinates for all frames
+            # This avoids decoder complexity of handling differential coordinates (dx/dy)
+            self.gfv_cnt = [i for i in range(frames)]
+            self.gfv_id = [1] * frames
+            self.gfv_DrivePicFusionFlag = [0] * frames
+            self.gfv_LowConfidenceFaceParameterFlag = [0] * frames
+            self.gfv_CoordinatePresentFlag = [1] * frames
+            self.gfv_CoordinateQuantizationFactor = [coordinate_Qstep] * frames
+            self.gfv_CoordinatePredFlag = [0] * frames  # Disable prediction - use absolute coordinates
+            self.gfv_oordinatePointNum = [44] * frames
+            self.gfv_3DCoordinateFlag = [0] * frames  # Disable 3D, use 2D + Matrix
+            self.gfv_ZCoordinateMaxValue=[0] * frames
+            self.gfv_XCoordinate = []
+            self.gfv_YCoordinate = []
+            self.gfv_ZCoordinate = []
+            # Enable Matrix field for Z coordinates
+            self.gfv_MatrixPresentFlag = [1] * frames
+            self.gfv_MatrixElementPrecisionFactor= [matrix_Qstep] * frames
+            self.gfv_MatrixPredFlag = [0] * frames  # Disable matrix prediction too
+            self.gfv_NumMatrixType = [1] * frames
+            self.gfv_MatrixTypeIdx = [7] * frames  # Use type 7 (generic matrix)
+            self.gfv_NumMatricestoNumKpsFlag = [0] * frames
+            self.gfv_NumMatricesInfo = [0] * frames
+            self.gfv_Matrix3DSpaceFlag = [0] * frames
+            self.gfv_NumMatrices = [1] * frames
+            self.gfv_MatrixWidth = [44] * frames  # 44 Z values
+            self.gfv_MatrixHeight = [1] * frames  # 1x44 matrix
+            self.gfv_MatrixElement = []
+
     def update(self,kp_value):
         if self.model == 'CFTE' or self.model == 'CFTE_Lightweight':
             self.gfv_MatrixElement.append(kp_value)    
@@ -380,10 +417,64 @@ class SEIEncoder:
             kp_flat = kp_value['fg_kp'].flatten().cpu().numpy().tolist()
             self.gfv_XCoordinate.append(kp_flat[::2])
             self.gfv_YCoordinate.append(kp_flat[1::2])
+        
+        elif self.model == 'LivePortrait':
+            # kp_value layout: [kp(63), exp(63), scale(1), t(3), pitch, yaw, roll] = 133 elements
+            # SEI layout (44 points with X,Y in Coordinate + Z in Matrix):
+            #   Points 0-20:  21 canonical kp
+            #   Points 21-41: 21 expression
+            #   Point 42: X=scale-1, Y=pitch/100, Z=yaw/100
+            #   Point 43: X=t[0],    Y=t[1],      Z=roll/100
+            num_kp = 21
+            kp_size = 3 * num_kp
+
+            kp_flat = kp_value[:kp_size]
+            exp_flat = kp_value[kp_size:2 * kp_size]
+            scale = kp_value[2 * kp_size] if len(kp_value) > 2 * kp_size else 1.0
+            t = kp_value[2 * kp_size + 1:2 * kp_size + 4] if len(kp_value) >= 2 * kp_size + 4 else [0.0, 0.0, 0.0]
+            # Head pose angles (optional, default 0 if absent)
+            pitch = kp_value[2 * kp_size + 4] if len(kp_value) > 2 * kp_size + 4 else 0.0
+            yaw = kp_value[2 * kp_size + 5] if len(kp_value) > 2 * kp_size + 5 else 0.0
+            roll = kp_value[2 * kp_size + 6] if len(kp_value) > 2 * kp_size + 6 else 0.0
+            # Normalize angles to [-1, 1] by dividing by 100 (angles are in degrees, range ~[-97.5, 97.5])
+            pitch_n = pitch / 100.0
+            yaw_n = yaw / 100.0
+            roll_n = roll / 100.0
+
+            # Coordinate field: X,Y only (2D points)
+            x_coords = kp_flat[::3] + exp_flat[::3] + [scale - 1.0, t[0]]
+            y_coords = kp_flat[1::3] + exp_flat[1::3] + [pitch_n, t[1]]
+            
+            # Matrix field: Z coordinates (1x44 matrix). Last 2 Z slots carry yaw, roll.
+            z_coords = kp_flat[2::3] + exp_flat[2::3] + [yaw_n, roll_n]
+
+            while len(x_coords) < 44:
+                x_coords.append(0.0)
+                y_coords.append(0.0)
+                z_coords.append(0.0)
+            
+            self.gfv_XCoordinate.append(x_coords)
+            self.gfv_YCoordinate.append(y_coords)
+            self.gfv_MatrixElement.append(z_coords)  # Store Z in Matrix instead of ZCoordinate
 
 
         
     def prepare_to_code(self):
+        # LivePortrait values must stay in a parser-safe range for VVC-SEI.
+        # Keep coordinates as float and clamp to [-1, 1].
+        if self.model == 'LivePortrait':
+            gfv_XCoordinate_out = [[max(-1.0, min(1.0, float(x))) for x in frame] for frame in self.gfv_XCoordinate]
+            gfv_YCoordinate_out = [[max(-1.0, min(1.0, float(y))) for y in frame] for frame in self.gfv_YCoordinate]
+            gfv_ZCoordinate_out = []  # Not used, Z is in Matrix
+            
+            # Process Matrix field (Z coordinates)
+            gfv_MatrixElement_out = [[max(-1.0, min(1.0, float(z))) for z in frame] for frame in self.gfv_MatrixElement]
+        else:
+            gfv_XCoordinate_out = self.gfv_XCoordinate
+            gfv_YCoordinate_out = self.gfv_YCoordinate
+            gfv_ZCoordinate_out = self.gfv_ZCoordinate
+            gfv_MatrixElement_out = self.gfv_MatrixElement
+        
         self.cfgcontent_coordinate_matrix_info = ["SEIGenerativeFaceVideoId: " +str(self.list_to_cmd(self.gfv_id)) + '\n'
                                                     "SEIGenerativeFaceVideoCnt: " + str(self.list_to_cmd(self.gfv_cnt)) + '\n'
                                                     "SEIGenerativeFaceVideoDrivePicFusionFlag: "+str(self.list_to_cmd(self.gfv_DrivePicFusionFlag))  + '\n'
@@ -394,10 +485,10 @@ class SEIEncoder:
                                                     "SEIGenerativeFaceVideoCoordinatePredFlag: " + str(self.list_to_cmd(self.gfv_CoordinatePredFlag)) +'\n'
                                                     "SEIGenerativeFaceVideo3DCoordinateFlag: "+ str(self.list_to_cmd(self.gfv_3DCoordinateFlag)) +'\n'
                                                     "SEIGenerativeFaceVideoCoordinatePointNum: "+ str(self.list_to_cmd(self.gfv_oordinatePointNum)) +'\n'
-                                                    "SEIGenerativeFaceVideoXCoordinate: "+ str(self.list_to_cmd(self.gfv_XCoordinate)) +'\n'
-                                                    "SEIGenerativeFaceVideoYCoordinate: "+ str(self.list_to_cmd(self.gfv_YCoordinate)) +'\n'
+                                                    "SEIGenerativeFaceVideoXCoordinate: "+ str(self.list_to_cmd(gfv_XCoordinate_out)) +'\n'
+                                                    "SEIGenerativeFaceVideoYCoordinate: "+ str(self.list_to_cmd(gfv_YCoordinate_out)) +'\n'
                                                     "SEIGenerativeFaceVideoZCoordinateMaxValue: "+ str(self.list_to_cmd(self.gfv_ZCoordinateMaxValue)) +'\n'
-                                                    "SEIGenerativeFaceVideoZCoordinate: "+ str(self.list_to_cmd(self.gfv_ZCoordinate)) +'\n'
+                                                    "SEIGenerativeFaceVideoZCoordinate: "+ str(self.list_to_cmd(gfv_ZCoordinate_out)) +'\n'
 
                                                     "SEIGenerativeFaceVideoMatrixPresentFlag: "+ str(self.list_to_cmd(self.gfv_MatrixPresentFlag))  + "\n"
                                                     "SEIGenerativeFaceVideoMatrixElementPrecisionFactor: " + str(self.list_to_cmd(self.gfv_MatrixElementPrecisionFactor)) + "\n"
@@ -410,7 +501,7 @@ class SEIEncoder:
                                                     "SEIGenerativeFaceVideoNumMatrices: "+ str(self.list_to_cmd(self.gfv_NumMatrices)) + "\n"
                                                     "SEIGenerativeFaceVideoMatrixWidth: " + str(self.list_to_cmd(self.gfv_MatrixWidth)) + "\n"
                                                     "SEIGenerativeFaceVideoMatrixHeight: " + str(self.list_to_cmd(self.gfv_MatrixHeight)) + "\n" 
-                                                    'SEIGenerativeFaceVideoMatrixElement: '+ str(self.list_to_cmd(self.gfv_MatrixElement))+ "\n"]     
+                                                    'SEIGenerativeFaceVideoMatrixElement: '+ str(self.list_to_cmd(gfv_MatrixElement_out))+ "\n"]     
 
 
 
@@ -850,6 +941,101 @@ def sei_decode(f, model, device):
         kp_value_tensor=torch.Tensor(coordinate_vector).view(1, -1, 2).to(device)
         dict={}
         dict['fg_kp']=kp_value_tensor   
+        kp_value=dict
+
+    elif model == 'LivePortrait':
+        reference_driving_coordinate_x=[]
+        reference_driving_coordinate_y=[]
+        reference_driving_matrix=[]  # Z coordinates stored in Matrix field
+
+        lines = f.readlines()
+        for line in lines:
+            line = line.strip()
+
+            if 'gfv_coordinate_Xtensor:' in line:
+                reference_driving_coordinate_vector_x = line.strip('gfv_coordinate_Xtensor: ')
+                reference_driving_coordinate_x.append(reference_driving_coordinate_vector_x.replace(" ", ","))
+
+            if 'gfv_coordinate_Ytensor:' in line:
+                reference_driving_coordinate_vector_y = line.strip('gfv_coordinate_Ytensor: ')
+                reference_driving_coordinate_y.append(reference_driving_coordinate_vector_y.replace(" ", ","))
+
+            # Read Z coordinates from Matrix field
+            if 'gfv_MatrixElement:' in line:
+                reference_driving_matrix_vector = line.strip('gfv_MatrixElement: ')
+                reference_driving_matrix.append(reference_driving_matrix_vector.replace(" ", ","))
+
+        coordinate_vector_x = str(reference_driving_coordinate_x).replace("'", '')
+        coordinate_vector_x = eval('[%s]' % repr(coordinate_vector_x).replace('[', '').replace(']', '').replace("'", ""))
+        coordinate_vector_x = (np.array(coordinate_vector_x)).tolist()
+
+        coordinate_vector_y = str(reference_driving_coordinate_y).replace("'", '')
+        coordinate_vector_y = eval('[%s]' % repr(coordinate_vector_y).replace('[', '').replace(']', '').replace("'", ""))
+        coordinate_vector_y = (np.array(coordinate_vector_y)).tolist()
+
+        # Parse Z coordinates from Matrix field
+        coordinate_vector_z = str(reference_driving_matrix).replace("'", '')
+        coordinate_vector_z = eval('[%s]' % repr(coordinate_vector_z).replace('[', '').replace(']', '').replace("'", ""))
+        coordinate_vector_z = (np.array(coordinate_vector_z)).tolist()
+
+        f.close()
+
+        # Layout in SEI: Encoder packs X/Y/Z into 3 separate arrays (each 44 elements)
+        # x_coords = kp_x(21) + exp_x(21) + [scale-1.0, t[0]] = 44
+        # y_coords = kp_y(21) + exp_y(21) + [pitch_n, t[1]] = 44
+        # z_coords = kp_z(21) + exp_z(21) + [yaw_n, roll_n] = 44
+        # Must parse in the same way as encoding, NOT as 44 interleaved 3D points
+        total_points = min(len(coordinate_vector_x), len(coordinate_vector_y), len(coordinate_vector_z))
+        if total_points < 44:
+            pad = 44 - total_points
+            coordinate_vector_x.extend([0.0] * pad)
+            coordinate_vector_y.extend([0.0] * pad)
+            coordinate_vector_z.extend([0.0] * pad)
+
+        # Parse according to encoding layout
+        # X array: [kp_x[0..20], exp_x[0..20], scale-1.0, t[0]]
+        # Y array: [kp_y[0..20], exp_y[0..20], pitch/100, t[1]]
+        # Z array: [kp_z[0..20], exp_z[0..20], yaw/100, roll/100]
+        kp_x = coordinate_vector_x[0:21]
+        kp_y = coordinate_vector_y[0:21]
+        kp_z = coordinate_vector_z[0:21]
+
+        exp_x = coordinate_vector_x[21:42]
+        exp_y = coordinate_vector_y[21:42]
+        exp_z = coordinate_vector_z[21:42]
+
+        # Reconstruct kp and exp as 3D arrays (interleave x,y,z for each point)
+        kp_xyz = []
+        exp_xyz = []
+        for i in range(21):
+            kp_xyz.extend([kp_x[i], kp_y[i], kp_z[i]])
+            exp_xyz.extend([exp_x[i], exp_y[i], exp_z[i]])
+
+        # Parse additional parameters from last 2 slots
+        scale_delta = coordinate_vector_x[42]  # X[42] = scale - 1.0
+        scale_value = 1.0 + scale_delta
+        t_value = [coordinate_vector_x[43], coordinate_vector_y[43], 0.0]  # t[0], t[1]
+        # Head pose angles
+        pitch_value = coordinate_vector_y[42] * 100.0  # Y[42] = pitch/100
+        yaw_value = coordinate_vector_z[42] * 100.0    # Z[42] = yaw/100
+        roll_value = coordinate_vector_z[43] * 100.0   # Z[43] = roll/100
+
+        kp_tensor = torch.tensor(kp_xyz).view(1, 21, 3).float().to(device)
+        exp_tensor = torch.tensor(exp_xyz).view(1, 21, 3).float().to(device)
+        scale_tensor = torch.tensor([scale_value]).view(1, 1).float().to(device)
+        t_tensor = torch.tensor(t_value).view(1, 3).float().to(device)
+        pitch_tensor = torch.tensor([pitch_value]).float().to(device)
+        yaw_tensor = torch.tensor([yaw_value]).float().to(device)
+        roll_tensor = torch.tensor([roll_value]).float().to(device)
+
+        dict={}
+        dict['kp']=kp_tensor
+        dict['exp']=exp_tensor
+        dict['scale']=scale_tensor
+        dict['t']=t_tensor
+        dict['pitch']=pitch_tensor
+        dict['yaw']=yaw_tensor
+        dict['roll']=roll_tensor
         kp_value=dict
 
     return kp_value

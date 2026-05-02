@@ -83,7 +83,11 @@ if __name__ == "__main__":
     model_dirname=f'../experiment/'+model_name+"/"+'Iframe_'+str(iframe_format) +"/"+ str(width)+'x'+str(height) +"/" + feature_coding_mode+no_analysis_in_decoder_flag +"/"       
     #Initialize the codec with models
     model_config_path = f'./GFVC/{model_name}/checkpoint/{model_name}.yaml'
-    model_checkpoint_path = f'./GFVC/{model_name}/checkpoint/{model_name}-checkpoint.pth.tar' 
+    # LivePortrait uses 4 separate .pth files in checkpoint directory
+    if model_name == 'LivePortrait':
+        model_checkpoint_path = f'./GFVC/{model_name}/checkpoint/'
+    else:
+        model_checkpoint_path = f'./GFVC/{model_name}/checkpoint/{model_name}-checkpoint.pth.tar' 
     #Base layer for HDAC
     if use_base_layer:
         kp_output_path = os.path.join(model_dirname,'kp',seq+'_qp'+str(qp)+'_bqp'+str(bl_qp))+ '/'

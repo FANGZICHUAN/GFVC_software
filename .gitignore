@@ -1,8 +1,8 @@
 testing_sequences/
 testing_sequences_YUV420/
 experiment/
-source/GFVC/*/checkpoint/
-*.pth.tar
+source/GFVC/*/checkpoint/*.pth.tar
+source/GFVC/*/checkpoint/*.pth
 tmux.txt
 **/__pycache__/
 *.pyc
