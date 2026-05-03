@@ -134,31 +134,18 @@ if __name__ == "__main__":
     ref_decoder = RefereceImageDecoder(ref_input_path,qp,width=width,height=height,dec_name='vtm')
     # Keypoint Decoder
     if translated:
-        # For feature translation, use directory path for LivePortrait
-        if encoder_type == 'LivePortrait':
-            enc_checkpoint_path = f'./GFVC/{encoder_type}/checkpoint/'
-        elif encoder_type=='FV2V':
-            enc_checkpoint_path = f'./GFVC/{encoder_type}/checkpoint/{encoder_type}-checkpoint.pth.tar'
-        else:
-            enc_checkpoint_path = None
-        kp_decoder = get_inter_coder(encoder_type)(model_config_path=f'./GFVC/{encoder_type}/checkpoint/{encoder_type}.yaml' if encoder_type in ['FV2V', 'LivePortrait'] else None , model_checkpoint_path=enc_checkpoint_path, kp_output_dir=cf_input_path, device=device) # q_step must set as default for feature translation
+        kp_decoder = get_inter_coder(encoder_type)(model_config_path=None, model_checkpoint_path=None, kp_output_dir=cf_input_path, device=device)
     else:
-        # For direct decoding, use directory path for LivePortrait
-        if model_name == 'LivePortrait':
-            dec_checkpoint_path = f'./GFVC/{model_name}/checkpoint/'
-        elif model_name in ['FV2V', 'TPSMM']:
-            dec_checkpoint_path = f'./GFVC/{model_name}/checkpoint/{model_name}-checkpoint.pth.tar'
-        else:
-            dec_checkpoint_path = None
-        kp_decoder = get_inter_coder(model_name)(
-    model_config_path=f'./GFVC/{model_name}/checkpoint/{model_name}.yaml' if model_name in ['FV2V', 'TPSMM', 'LivePortrait'] else None, 
-    model_checkpoint_path=dec_checkpoint_path,
-    kp_output_dir=cf_input_path,
-    q_step=q_step,
-    device=device
-)
+        dec_checkpoint_path = None
+    kp_decoder = get_inter_coder(model_name)(
+        model_config_path=None,
+        model_checkpoint_path=None,
+        kp_output_dir=cf_input_path,
+        q_step=q_step,
+        device=device
+    )
     #Reconstruction models
-    inter_coder = get_inter_coder(model_name)(model_config_path, model_checkpoint_path, device=device)
+    inter_coder = get_inter_coder(model_name)(model_config_path=model_config_path, model_checkpoint_path=model_checkpoint_path, device=device)
     out_video = []
     ################################################################################################################################################################################
     #######AE feature coding mode###################################################################################################################################################
