@@ -173,8 +173,12 @@ class LivePortraitCoder:
         self.spade_generator.eval()
 
     def reference_frame_(self, reference):
-        """Store I-frame as reference and extract appearance features"""
+        """Store I-frame as reference and extract appearance features.
+        When networks are not loaded (kp-only arithmetic mode), only cache the frame."""
         self.reference_frame = reference
+        if self.appearance_extractor is None:
+            self.ref_appearance_features = None
+            return
         with torch.no_grad():
             self.ref_appearance_features = self.appearance_extractor(reference)
 
@@ -269,9 +273,20 @@ class LivePortraitCoder:
         """Decoder: Generate frame from decoded motion parameters.
 
         kp_inter: dict with 'kp', 'exp', 'scale', 't', 'pitch', 'yaw', 'roll'
-        kp_driving = (kp @ R + exp) * scale + t[:2]
+        kp_driving = (x_c_s @ R + exp) * scale + t[:2]
+
+        Following the original LivePortrait pipeline, the canonical keypoints
+        x_c_s are taken from the source (I-frame) and held fixed for the whole
+        sequence. MotionExtractor's per-frame canonical prediction is not
+        perfectly identity-invariant, so reusing it per P-frame injects
+        high-frequency jitter that manifests as expression flicker / landmark
+        drift. Overriding kp_inter['kp'] with the source's canonical removes
+        that jitter without changing the transmitted bitstream.
         """
         with torch.no_grad():
+            if getattr(self, 'kp_reference_full', None) is not None:
+                kp_inter = dict(kp_inter)
+                kp_inter['kp'] = self.kp_reference_full['kp']
             kp_driving = self._transform_keypoints(kp_inter)
             warped_features = self.warping_network(
                 feature_3d=self.ref_appearance_features,
@@ -293,11 +308,16 @@ class LivePortraitCoder:
         if frame_idx == 0:
             residual = quantized_current
         else:
-            residual = [quantized_current[i] - self.rec_sem[-1][i] for i in range(len(quantized_current))]
+            previous = self.rec_sem[-1]
+            if all(isinstance(x, int) for x in previous):
+                previous_quantized = previous
+            else:
+                previous_quantized = [int(round(x * self.q_step[0])) for x in previous]
+            residual = [quantized_current[i] - previous_quantized[i] for i in range(len(quantized_current))]
 
         # 3. Exp-Golomb encoding
         bin_path = os.path.join(self.kp_output_dir, 'frame' + str(frame_idx).zfill(4) + '.bin')
-        final_encoder_expgolomb(residual, bin_path)
+        final_encoder_expgolomb(residual.copy(), bin_path)
 
         # Calculate bits
         kp_bits = os.path.getsize(bin_path) * 8
@@ -307,7 +327,7 @@ class LivePortraitCoder:
             self.rec_sem.append(quantized_current)
         else:
             # Reconstruct and store
-            rec_quantized = [self.rec_sem[-1][i] + residual[i] for i in range(len(residual))]
+            rec_quantized = [previous_quantized[i] + residual[i] for i in range(len(residual))]
             self.rec_sem.append(rec_quantized)
 
         return kp_list, kp_bits
@@ -327,7 +347,14 @@ class LivePortraitCoder:
         if frame_idx == 0:
             reconstructed_quantized = residual_list
         else:
-            reconstructed_quantized = [self.rec_sem[-1][i] + residual_list[i] for i in range(len(residual_list))]
+            previous = self.rec_sem[-1]
+            # I-frame entry in rec_sem may be stored as floats (raw kp_value_frame).
+            # Quantize it before adding integer residuals, mirroring encode_kp().
+            if all(isinstance(x, int) for x in previous):
+                previous_quantized = previous
+            else:
+                previous_quantized = [int(round(x * self.q_step[0])) for x in previous]
+            reconstructed_quantized = [previous_quantized[i] + residual_list[i] for i in range(len(residual_list))]
         
         self.rec_sem.append(reconstructed_quantized)
         

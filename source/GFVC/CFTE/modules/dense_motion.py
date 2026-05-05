@@ -102,13 +102,13 @@ class DenseMotionNetwork(nn.Module):
 
         #feature map-->img-->sparse motion detecion point p0 and p1     
         heatmap_source_lt = heatmap_source['value'] 
-        heatmap_source_lt = heatmap_source_lt.cuda().data.cpu().numpy()         
+        heatmap_source_lt = heatmap_source_lt.detach().cpu().numpy()         
         heatmap_source_lt = (heatmap_source_lt - np.min(heatmap_source_lt))/(np.max(heatmap_source_lt) - np.min(heatmap_source_lt)) *255.0  #转为0-255  
         heatmap_source_lt=np.round(heatmap_source_lt)   #转换数据类型
         heatmap_source_lt=heatmap_source_lt.astype(np.uint8)
 
         heatmap_driving_lt = heatmap_driving['value']
-        heatmap_driving_lt = heatmap_driving_lt.cuda().data.cpu().numpy()         
+        heatmap_driving_lt = heatmap_driving_lt.detach().cpu().numpy()         
         heatmap_driving_lt = (heatmap_driving_lt - np.min(heatmap_driving_lt))/(np.max(heatmap_driving_lt) - np.min(heatmap_driving_lt)) *255.0  #转为0-255  
         heatmap_driving_lt=np.round(heatmap_driving_lt)   #转换数据类型
         heatmap_driving_lt=heatmap_driving_lt.astype(np.uint8)       
@@ -124,7 +124,7 @@ class DenseMotionNetwork(nn.Module):
             flow = cv2.calcOpticalFlowFarneback(heatmap_source_lt11,heatmap_driving_lt11,None, 0.5, 2, 15, 3, 5, 1.2, 0)  ####            
             GFflow.append(flow)
             
-        tmp_flow=torch.Tensor(np.array(GFflow)).cuda()#.to(device)         
+        tmp_flow=torch.Tensor(np.array(GFflow)).to(source_image.device)         
         return tmp_flow    
 
 

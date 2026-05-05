@@ -15,12 +15,22 @@ def read_config_file(config_path):
 
 def RawReader_planar(FileName, ImgWidth, ImgHeight, NumFramesToBeComputed):
     
+    if not os.path.exists(FileName):
+        raise FileNotFoundError(FileName)
     f   = open(FileName, 'rb')
     frames  = NumFramesToBeComputed
     width   = ImgWidth
     height  = ImgHeight
     data = f.read()
     f.close()
+    frame_size = width * height * 3
+    if len(data) != frames * frame_size:
+        available_frames = len(data) // frame_size
+        raise ValueError(
+            f'{FileName} contains {available_frames} complete frames '
+            f'({len(data)} bytes), expected {frames} frames '
+            f'({frames * frame_size} bytes)'
+        )
     data = [int(x) for x in data]
 
     data_list=[]

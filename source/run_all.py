@@ -11,31 +11,17 @@ def read_config_file(config_path):
     return config
 
 
-def run_stage(command, stage_name):
+def run_stage(command, stage_name, model=None):
     env = os.environ.copy()
     env['TQDM_DISABLE'] = '1'
-    result = subprocess.run(
-        command,
-        shell=True,
-        capture_output=True,
-        text=True,
-        env=env,
-    )
-
-    combined_output = (result.stdout or '') + '\n' + (result.stderr or '')
+    if model is not None and model in MODEL_DEVICES:
+        command = command + ' --device ' + MODEL_DEVICES[model]
+    result = subprocess.run(command, shell=True, text=True, env=env)
+    combined_output = ''
     key_lines = []
-    for line in combined_output.splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if any(token in stripped for token in ['success', 'Done!', 'Encoding time', 'Decoding time', 'loaded successfully']):
-            key_lines.append(stripped)
 
     if result.returncode != 0:
         print(f'[FAIL] {stage_name}')
-        tail = [l for l in combined_output.splitlines() if l.strip()][-20:]
-        if tail:
-            print('\n'.join(tail))
         raise RuntimeError(f'Stage failed: {stage_name}')
 
     if key_lines:
@@ -50,8 +36,8 @@ def run_stage(command, stage_name):
 RGB_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences/'  ###You should download the testing sequence and modify the dir.
 YUV_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences_YUV420/'
 DATASETS = ['VOXCELEB'] #
-SEQ_LIST = ['001'] #,'002','003','004','005','006','007','008','009','010','011','012','013','014','015'] #,'016','017','018','019','020' ] #] #
-FEATURE_CODING_MODE = 'SEI' 
+SEQ_LIST = ['001','002','003','004','005','006','007','008','009','010','011','012','013','014','015'] #,'016','017','018','019','020' ] #] #
+FEATURE_CODING_MODE = 'AE' 
 
 ID = '_'+os.path.basename(__file__)[:-3] + '_'.join(DATASETS) + '_'.join(SEQ_LIST) 
 
@@ -60,8 +46,9 @@ PATH_TO_SOURCE = os.path.abspath('.')
 PATH_TO_EVAL = os.path.abspath('../evaluate')
 CONFIG = 'config_256'
 
-MODELS = ['LivePortrait'] #,'CFTE','FV2V','TPSMM'] #,'HDAC','MRDAC']#, ,'DAC','HDAC_Extension'] 'FV2V','FOMM',
-DECODER_MODELS = ['LivePortrait'] #,'CFTE','FV2V','TPSMM'] #,'HDAC','MRDAC']#,'DAC','HDAC_Extension','DAC'] 'FV2V',  'FOMM',
+MODELS = ['TPSMM'] #,'CFTE','FV2V','TPSMM'] #,'HDAC','MRDAC']#, ,'DAC','HDAC_Extension'] 'FV2V','FOMM',
+DECODER_MODELS = ['TPSMM'] #,'CFTE','FV2V','TPSMM'] #,'HDAC','MRDAC']#,'DAC','HDAC_Extension','DAC'] 'FV2V',  'FOMM',
+MODEL_DEVICES = {'LivePortrait': 'cuda', 'CFTE': 'cuda', 'FV2V': 'cpu', 'TPSMM': 'cuda'}
 
 ENCODE = True
 DECODE = True
@@ -72,8 +59,8 @@ EVAL_YUV = True
 SUMMARY_RESULTS = True
 TRANSLATED = False
 ###Please specify encoder type in decoder config files if you want to execute the translated model.
-if not TRANSLATED:
-    DECODER_MODELS = MODELS
+if TRANSLATED:
+    pass
 
 ###########################################################################################################
 
@@ -95,7 +82,7 @@ if ENCODE:
     for dataset in DATASETS:
         for model in MODELS:
             config_path = '../'+CONFIG+'/'+model+"_"+dataset+"_enc.yaml"
-            run_stage("python run.py --config "+ config_path + ' --dataset_config '+dataset_config_path, f'Encode {model} {dataset}')
+            run_stage("python run.py --config "+ config_path + ' --dataset_config '+dataset_config_path, f'Encode {model} {dataset}', model)
 if DECODE:
     print('Decoding........')
     for dataset in DATASETS:
@@ -106,7 +93,7 @@ if DECODE:
             decoder_config['encoder_type'] = model
             with open(decoder_dataset_config_path, "w") as f:
                 yaml.dump(decoder_config, f)
-            run_stage("python run.py --config "+ config_path + ' --dataset_config '+decoder_dataset_config_path, f'Decode {model} {dataset}')
+            run_stage("python run.py --config "+ config_path + ' --dataset_config '+decoder_dataset_config_path, f'Decode {model} {dataset}', model)
             os.remove(decoder_dataset_config_path)
 
 os.chdir(PATH_TO_EVAL)
