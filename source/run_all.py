@@ -2,7 +2,9 @@ import sys
 import os
 import time
 import subprocess
-import yaml 
+import yaml
+import warnings
+warnings.filterwarnings('ignore')
 
 def read_config_file(config_path):
     '''Simply reads a yaml configuration file'''
@@ -11,24 +13,44 @@ def read_config_file(config_path):
     return config
 
 
+class TaskCounter:
+    def __init__(self):
+        self.total = 0
+        self.current = 0
+    
+    def increment(self):
+        self.current += 1
+    
+    def set_total(self, total):
+        self.total = total
+    
+    def get_progress(self):
+        return f"[{self.current}/{self.total}]"
+
+
+task_counter = TaskCounter()
+
+
 def run_stage(command, stage_name, model=None):
+    global task_counter
     env = os.environ.copy()
     env['TQDM_DISABLE'] = '1'
+    env['PYTHONWARNINGS'] = 'ignore'
     if model is not None and model in MODEL_DEVICES:
         command = command + ' --device ' + MODEL_DEVICES[model]
-    result = subprocess.run(command, shell=True, text=True, env=env)
-    combined_output = ''
-    key_lines = []
-
+    
+    start_time = time.time()
+    result = subprocess.run(command, shell=True, text=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env)
+    elapsed_time = time.time() - start_time
+    
+    task_counter.increment()
+    progress = task_counter.get_progress()
+    
     if result.returncode != 0:
-        print(f'[FAIL] {stage_name}')
+        print(f'{progress} [FAIL] {stage_name}')
         raise RuntimeError(f'Stage failed: {stage_name}')
-
-    if key_lines:
-        print(f'[OK] {stage_name}')
-        print('\n'.join(key_lines[-5:]))
-    else:
-        print(f'[OK] {stage_name}')
+    
+    print(f'{progress} [OK] {stage_name} ({elapsed_time:.2f}s)')
 
 ############################Please Specify Your Configuration Here########################################
 
@@ -36,7 +58,7 @@ def run_stage(command, stage_name, model=None):
 RGB_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences/'  ###You should download the testing sequence and modify the dir.
 YUV_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences_YUV420/'
 DATASETS = ['VOXCELEB'] #
-SEQ_LIST = ['001'] #,'002','003','004','005','006','007','008','009','010','011','012','013','014','015'] #,'016','017','018','019','020' ] #] #
+SEQ_LIST = ['001','002'] #,'003','004','005','006','007','008','009','010','011','012','013','014','015']
 FEATURE_CODING_MODE = 'AE' 
 
 ID = '_'+os.path.basename(__file__)[:-3] + '_'.join(DATASETS) + '_'.join(SEQ_LIST) 
@@ -64,6 +86,38 @@ if TRANSLATED:
 
 ###########################################################################################################
 
+def calculate_total_tasks():
+    total = 0
+    if ENCODE:
+        total += len(DATASETS) * len(MODELS)
+    if DECODE:
+        total += len(DATASETS) * len(DECODER_MODELS)
+    if EVALUATE:
+        if RGB2YUV:
+            total += len(DATASETS) * len(DECODER_MODELS)
+        if EVAL_RGB:
+            total += len(DATASETS) * len(DECODER_MODELS)
+        if EVAL_YUV:
+            total += len(DATASETS) * len(DECODER_MODELS)
+    if SUMMARY_RESULTS:
+        total += len(DATASETS) * len(MODELS)
+    return total
+
+print('\n' + '='*70)
+print('GFVC Pipeline Configuration')
+print('='*70)
+print(f'Datasets: {DATASETS}')
+print(f'Sequences: {SEQ_LIST}')
+print(f'Models: {MODELS}')
+print(f'Feature Coding Mode: {FEATURE_CODING_MODE}')
+print(f'Config: {CONFIG}')
+print(f'Encode: {ENCODE}, Decode: {DECODE}, Evaluate: {EVALUATE}')
+print(f'Total Tasks: {calculate_total_tasks()}')
+print('='*70 + '\n')
+
+task_counter.set_total(calculate_total_tasks())
+start_time_total = time.time()
+
 os.chdir(PATH_TO_SOURCE)
 dataset_config = {
  'sequence_dir':RGB_SEQ_DIR,
@@ -78,13 +132,13 @@ with open(dataset_config_path, "w") as f:
 
 
 if ENCODE:
-    print('Encoding........')
+    print('\n--- ENCODING STAGE ---')
     for dataset in DATASETS:
         for model in MODELS:
             config_path = '../'+CONFIG+'/'+model+"_"+dataset+"_enc.yaml"
             run_stage("python run.py --config "+ config_path + ' --dataset_config '+dataset_config_path, f'Encode {model} {dataset}', model)
 if DECODE:
-    print('Decoding........')
+    print('\n--- DECODING STAGE ---')
     for dataset in DATASETS:
         for model in DECODER_MODELS:
             config_path = '../'+CONFIG+'/'+model+"_"+dataset+"_dec.yaml"
@@ -98,10 +152,9 @@ if DECODE:
 
 os.chdir(PATH_TO_EVAL)
 if EVALUATE:
-    print('Evaluating........')
+    print('\n--- EVALUATION STAGE ---')
     
     if RGB2YUV:
-        print('RGB to YUV converting........')
         for dataset in DATASETS:
             for model in DECODER_MODELS:
                 config_path = '../'+CONFIG+'/'+model+"_"+dataset+"_dec.yaml"
@@ -113,7 +166,6 @@ if EVALUATE:
                 run_stage("python rgb444_to_yuv420.py --config "+ config_path + ' --dataset_config '+decoder_dataset_config_path, f'RGB2YUV {model} {dataset}')
                 os.remove(decoder_dataset_config_path)
     if EVAL_RGB:
-        print('RGB quality evaluation........')
         for dataset in DATASETS:
             for model in DECODER_MODELS:
                 config_path = '../'+CONFIG+'/'+model+"_"+dataset+"_dec.yaml"
@@ -125,7 +177,6 @@ if EVALUATE:
                 run_stage("python metrics.py --config "+ config_path + ' --dataset_config '+decoder_dataset_config_path, f'RGB Eval {model} {dataset}')
                 os.remove(decoder_dataset_config_path)
     if EVAL_YUV:
-        print('YUV quality evaluation........')
         for dataset in DATASETS:
             for model in DECODER_MODELS:
                 config_path = '../'+CONFIG+'/'+model+"_"+dataset+"_dec.yaml"
@@ -138,7 +189,7 @@ if EVALUATE:
                 os.remove(decoder_dataset_config_path)
 
 if SUMMARY_RESULTS:
-    print('Summarizing evaluation results')
+    print('\n--- SUMMARY STAGE ---')
     for dataset in DATASETS:
         for model in MODELS:
             config_path = '../'+CONFIG+'/'+model+"_"+dataset+"_enc.yaml"
@@ -229,7 +280,12 @@ if SUMMARY_RESULTS:
                                         f.write(words[num]+ '\n')
 
 os.remove(dataset_config_path)
-print('Done!')
+
+elapsed_time_total = time.time() - start_time_total
+print('\n' + '='*70)
+print(f'Pipeline Completed Successfully!')
+print(f'Total Time: {elapsed_time_total:.2f}s ({elapsed_time_total/60:.2f}m)')
+print('='*70 + '\n')
 
 
                     
