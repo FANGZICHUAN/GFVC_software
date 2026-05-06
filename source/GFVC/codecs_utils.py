@@ -29,7 +29,7 @@ def get_inter_coder(model_name):
         return HDAC_Extension
     elif model_name == 'TPSMM':
         return TPSMMCoder
-    elif model_name == 'LivePortrait':
+    elif model_name == 'LVPT' or model_name == 'LivePortrait':
         return LivePortraitCoder
     else:
         raise NotImplementedError(f"Model {model_name} not implemented")
@@ -360,7 +360,7 @@ class SEIEncoder:
             self.gfv_MatrixHeight = [0] * frames
             self.gfv_MatrixElement = [0] * frames
 
-        elif self.model == 'LivePortrait':
+        elif self.model == 'LVPT' or self.model == 'LivePortrait':
             # LivePortrait: 21 3D keypoints + 21 expression + scale + translation = 21*3*2 + 1 + 3 = 130 parameters
             # For SEI: X,Y coordinates in Coordinate field, Z coordinates in Matrix field (workaround for VVC bug)
             #  - Coordinate: 44 2D points (X,Y only)
@@ -418,7 +418,7 @@ class SEIEncoder:
             self.gfv_XCoordinate.append(kp_flat[::2])
             self.gfv_YCoordinate.append(kp_flat[1::2])
         
-        elif self.model == 'LivePortrait':
+        elif self.model == 'LVPT' or self.model == 'LivePortrait':
             # kp_value layout: [kp(63), exp(63), scale(1), t(3), pitch, yaw, roll] = 133 elements
             # SEI layout (44 points with X,Y in Coordinate + Z in Matrix):
             #   Points 0-20:  21 canonical kp
@@ -462,7 +462,7 @@ class SEIEncoder:
     def prepare_to_code(self):
         # LivePortrait values must stay in a parser-safe range for VVC-SEI.
         # Keep coordinates as float and clamp to [-1, 1].
-        if self.model == 'LivePortrait':
+        if self.model == 'LVPT' or self.model == 'LivePortrait':
             gfv_XCoordinate_out = [[max(-1.0, min(1.0, float(x))) for x in frame] for frame in self.gfv_XCoordinate]
             gfv_YCoordinate_out = [[max(-1.0, min(1.0, float(y))) for y in frame] for frame in self.gfv_YCoordinate]
             gfv_ZCoordinate_out = []  # Not used, Z is in Matrix

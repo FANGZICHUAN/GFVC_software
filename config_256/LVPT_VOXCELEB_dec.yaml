@@ -1,4 +1,4 @@
-codec_name: 'LivePortrait'
+codec_name: 'LVPT'
 
 #dataset params 
 dataset: 'VOXCELEB'
@@ -10,13 +10,13 @@ width: 256
 iframe_format: 'YUV420'
 
 #codec params   
-inference_mode: 'encoder'
+inference_mode: 'decoder'
 qp_list: ["12"] #,"22","32","42"]
 feature_coding_mode: 'AE'
 ae_qf: [1024,1024]
 sei_coordinate_qf: 8
 sei_matrix_qf: 4
-encoder_type: 'LivePortrait'
+encoder_type: 'LVPT'
 no_analysis_in_decoder: 'OFF' 
 color_calibration: 'OFF'
 

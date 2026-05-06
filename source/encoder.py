@@ -82,10 +82,12 @@ if __name__ == "__main__":
     # Output directory
     model_dirname=f'../experiment/'+model_name+"/"+'Iframe_'+str(iframe_format) +"/"+ str(width)+'x'+str(height) +"/" + feature_coding_mode+no_analysis_in_decoder_flag +"/"       
     #Initialize the codec with models
-    model_config_path = f'./GFVC/{model_name}/checkpoint/{model_name}.yaml'
+    # Map LVPT to LivePortrait for file paths
+    model_dir_name = 'LivePortrait' if model_name == 'LVPT' else model_name
+    model_config_path = f'./GFVC/{model_dir_name}/checkpoint/{model_dir_name}.yaml'
     # LivePortrait uses 4 separate .pth files in checkpoint directory
-    if model_name == 'LivePortrait':
-        model_checkpoint_path = f'./GFVC/{model_name}/checkpoint/'
+    if model_name == 'LVPT' or model_name == 'LivePortrait':
+        model_checkpoint_path = f'./GFVC/{model_dir_name}/checkpoint/'
     else:
         model_checkpoint_path = f'./GFVC/{model_name}/checkpoint/{model_name}-checkpoint.pth.tar' 
     #Base layer for HDAC

@@ -121,10 +121,12 @@ if __name__ == "__main__":
         output_video_rgb =dec_output_path+seq+'_qp'+str(qp)+'.rgb'
         output_video_mp4 =dec_output_path+seq+'_qp'+str(qp)+'.mp4'
     
-    model_config_path = f'./GFVC/{model_name}/checkpoint/{model_name}.yaml'
+    # Map LVPT to LivePortrait for file paths
+    model_dir_name = 'LivePortrait' if model_name == 'LVPT' else model_name
+    model_config_path = f'./GFVC/{model_dir_name}/checkpoint/{model_dir_name}.yaml'
     # LivePortrait uses 4 separate .pth files in checkpoint directory
-    if model_name == 'LivePortrait':
-        model_checkpoint_path = f'./GFVC/{model_name}/checkpoint/'
+    if model_name == 'LVPT' or model_name == 'LivePortrait':
+        model_checkpoint_path = f'./GFVC/{model_dir_name}/checkpoint/'
     else:
         model_checkpoint_path = f'./GFVC/{model_name}/checkpoint/{model_name}-checkpoint.pth.tar'     
     f_dec=open(output_video_rgb,'w') 
@@ -135,17 +137,18 @@ if __name__ == "__main__":
     # Keypoint Decoder
     if translated:
         # For feature translation, use directory path for LivePortrait
-        if encoder_type == 'LivePortrait':
-            enc_checkpoint_path = f'./GFVC/{encoder_type}/checkpoint/'
+        encoder_dir_name = 'LivePortrait' if encoder_type == 'LVPT' else encoder_type
+        if encoder_type == 'LVPT' or encoder_type == 'LivePortrait':
+            enc_checkpoint_path = f'./GFVC/{encoder_dir_name}/checkpoint/'
         elif encoder_type=='FV2V':
             enc_checkpoint_path = f'./GFVC/{encoder_type}/checkpoint/{encoder_type}-checkpoint.pth.tar'
         else:
             enc_checkpoint_path = None
-        kp_decoder = get_inter_coder(encoder_type)(model_config_path=f'./GFVC/{encoder_type}/checkpoint/{encoder_type}.yaml' if encoder_type in ['FV2V', 'LivePortrait'] else None , model_checkpoint_path=enc_checkpoint_path, kp_output_dir=cf_input_path, device=device) # q_step must set as default for feature translation
+        kp_decoder = get_inter_coder(encoder_type)(model_config_path=f'./GFVC/{encoder_dir_name}/checkpoint/{encoder_dir_name}.yaml' if encoder_type in ['FV2V', 'LVPT', 'LivePortrait'] else None , model_checkpoint_path=enc_checkpoint_path, kp_output_dir=cf_input_path, device=device) # q_step must set as default for feature translation
     else:
         # For direct decoding, use directory path for LivePortrait
-        if model_name == 'LivePortrait':
-            dec_checkpoint_path = f'./GFVC/{model_name}/checkpoint/'
+        if model_name == 'LVPT' or model_name == 'LivePortrait':
+            dec_checkpoint_path = f'./GFVC/{model_dir_name}/checkpoint/'
         elif model_name in ['FV2V', 'TPSMM']:
             dec_checkpoint_path = f'./GFVC/{model_name}/checkpoint/{model_name}-checkpoint.pth.tar'
         else:
@@ -153,7 +156,7 @@ if __name__ == "__main__":
         # kp_decoder only performs arithmetic decoding (decode_kp / rec_sem bookkeeping);
         # for LivePortrait skip network init to avoid loading ~2GB of weights twice
         # (the heavy reconstruction path uses the separate `inter_coder` below).
-        if model_name == 'LivePortrait':
+        if model_name == 'LVPT' or model_name == 'LivePortrait':
             kp_decoder = get_inter_coder(model_name)(
                 model_config_path=None,
                 model_checkpoint_path=None,
@@ -163,7 +166,7 @@ if __name__ == "__main__":
             )
         else:
             kp_decoder = get_inter_coder(model_name)(
-                model_config_path=f'./GFVC/{model_name}/checkpoint/{model_name}.yaml' if model_name in ['FV2V', 'TPSMM'] else None,
+                model_config_path=f'./GFVC/{model_dir_name}/checkpoint/{model_dir_name}.yaml' if model_name in ['FV2V', 'TPSMM'] else None,
                 model_checkpoint_path=dec_checkpoint_path,
                 kp_output_dir=cf_input_path,
                 q_step=q_step,

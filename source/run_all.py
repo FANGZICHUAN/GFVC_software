@@ -58,7 +58,7 @@ def run_stage(command, stage_name, model=None):
 RGB_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences/'  ###You should download the testing sequence and modify the dir.
 YUV_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences_YUV420/'
 DATASETS = ['VOXCELEB'] #
-SEQ_LIST = ['001','002'] #,'003','004','005','006','007','008','009','010','011','012','013','014','015']
+SEQ_LIST = ['001']#,'002','003','004','005','006','007','008','009','010','011','012','013','014','015']
 FEATURE_CODING_MODE = 'AE' 
 
 ID = '_'+os.path.basename(__file__)[:-3] + '_'.join(DATASETS) + '_'.join(SEQ_LIST) 
@@ -68,9 +68,9 @@ PATH_TO_SOURCE = os.path.abspath('.')
 PATH_TO_EVAL = os.path.abspath('../evaluate')
 CONFIG = 'config_256'
 
-MODELS = ['LivePortrait','CFTE','TPSMM'] #,'FV2V']
-DECODER_MODELS = ['LivePortrait','CFTE','TPSMM'] #,'FV2V'] 
-MODEL_DEVICES = {'LivePortrait': 'cuda', 'CFTE': 'cuda', 'FV2V': 'cpu', 'TPSMM': 'cuda'}
+MODELS = ['LVPT']#,'CFTE','TPSMM'] #,'FV2V']
+DECODER_MODELS = ['LVPT']#,'CFTE','TPSMM'] #,'FV2V'] 
+MODEL_DEVICES = {'LVPT': 'cuda', 'CFTE': 'cuda', 'TPSMM': 'cuda', 'FV2V': 'cuda'}
 
 ENCODE = True
 DECODE = True

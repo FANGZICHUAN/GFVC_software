@@ -1,4 +1,4 @@
-codec_name: 'LivePortrait'
+codec_name: 'LVPT'
 
 #dataset params 
 dataset: 'ClassC'
@@ -16,7 +16,7 @@ feature_coding_mode: 'AE'
 ae_qf: [256,256]
 sei_coordinate_qf: 12
 sei_matrix_qf: 12
-encoder_type: 'LivePortrait'
+encoder_type: 'LVPT'
 no_analysis_in_decoder: 'OFF' 
 color_calibration: 'OFF'
 
