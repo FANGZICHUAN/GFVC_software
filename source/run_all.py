@@ -68,8 +68,8 @@ PATH_TO_SOURCE = os.path.abspath('.')
 PATH_TO_EVAL = os.path.abspath('../evaluate')
 CONFIG = 'config_256'
 
-MODELS = ['LVPT']#,'CFTE','TPSMM'] #,'FV2V']
-DECODER_MODELS = ['LVPT']#,'CFTE','TPSMM'] #,'FV2V'] 
+MODELS = ['LVPT','CFTE','TPSMM','FV2V']
+DECODER_MODELS = ['LVPT','CFTE','TPSMM','FV2V'] 
 MODEL_DEVICES = {'LVPT': 'cuda', 'CFTE': 'cuda', 'TPSMM': 'cuda', 'FV2V': 'cuda'}
 
 ENCODE = True
