@@ -179,7 +179,7 @@ class LivePortrait:
     def encode_kp(self, kp_list: List[str], frame_idx: int):
         """Encode keypoints with residual coding"""
         # Compute residual
-        if frame_idx == 0:
+        if len(self.rec_sem) == 0:
             kp_difference = (np.array(kp_list)).tolist()
         else:
             kp_difference = (np.array(kp_list) - np.array(self.rec_sem[-1])).tolist()
@@ -218,7 +218,7 @@ class LivePortrait:
 
         res_difference_dec = res_x + res_y + res_z
 
-        if frame_idx == 0:
+        if len(self.rec_sem) == 0:
             rec_semantics = (np.array(res_difference_dec)).tolist()
         else:
             rec_semantics = (np.array(res_difference_dec) + np.array(self.rec_sem[-1])).tolist()
@@ -247,7 +247,7 @@ class LivePortrait:
         kp_difference_dec = [i / self.q_step[0] for i in kp_difference]
         kp_difference_dec = eval('[%s]' % repr(kp_difference_dec).replace('[', '').replace(']', ''))
 
-        if frame_idx == 0:
+        if len(self.rec_sem) == 0:
             kp_previous = [0. for _ in range(len(kp_difference_dec))]
         else:
             kp_previous = eval('[%s]' % repr(self.rec_sem[-1]).replace('[', '').replace(']', '').replace("'", ""))

@@ -19,10 +19,12 @@ if __name__ == "__main__":
         seqlist= dataset_args['seq_list'] 
         Sequence_dir=dataset_args['sequence_dir'] 
         feature_coding_mode = dataset_args['feature_coding_mode']
+        gop_size = dataset_args.get('gop_size', 100)
     else:
         seqlist= args['seq_list'] 
         Sequence_dir=args['sequence_dir'] 
         feature_coding_mode = args['feature_coding_mode']
+        gop_size = args.get('gop_size', 100)
         
 
     frames = args['num_frames']
@@ -68,7 +70,7 @@ if __name__ == "__main__":
                     cmd_blqp = cmd +  use_base_layer + " "+ str(blqp) + " "
                     if coding_mode == 'decoder':
                         cmd_blqp = cmd_blqp + encoder_type+ " "+str(color_calibration) +" "
-                    cmd_blqp = cmd_blqp + str(device) + " "
+                    cmd_blqp = cmd_blqp + str(device) + " " + str(gop_size) + " "
                     subprocess.run(cmd_blqp, shell=True, check=True)
                     if model_name in ['CFTE','FV2V','FOMM', 'DAC', 'TPSMM']:    
                         print(model_name+"_"+coding_mode+"_"+testingdata_name+"_"+seq+"_QP"+str(qp)+" Finished")

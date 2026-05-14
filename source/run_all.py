@@ -60,6 +60,7 @@ YUV_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences_YUV420/'
 DATASETS = ['VOXCELEB'] #
 SEQ_LIST = ['001']#,'002','003','004','005','006','007','008','009','010','011','012','013','014','015']
 FEATURE_CODING_MODE = 'AE' 
+GOP_SIZE = 10  # GOP size for multi-reference frame coding (100 = single reference frame, i.e., frame 0 only)
 
 ID = '_'+os.path.basename(__file__)[:-3] + '_'.join(DATASETS) + '_'.join(SEQ_LIST) 
 
@@ -68,8 +69,8 @@ PATH_TO_SOURCE = os.path.abspath('.')
 PATH_TO_EVAL = os.path.abspath('../evaluate')
 CONFIG = 'config_256'
 
-MODELS = ['LVPT','CFTE','TPSMM','FV2V']
-DECODER_MODELS = ['LVPT','CFTE','TPSMM','FV2V'] 
+MODELS = ['LVPT'] #,'CFTE','TPSMM','FV2V']
+DECODER_MODELS = ['LVPT'] #,'CFTE','TPSMM','FV2V'] 
 MODEL_DEVICES = {'LVPT': 'cuda', 'CFTE': 'cuda', 'TPSMM': 'cuda', 'FV2V': 'cuda'}
 
 ENCODE = True
@@ -124,7 +125,8 @@ dataset_config = {
  'yuv_sequence_dir':YUV_SEQ_DIR,
  'seq_list':SEQ_LIST,
  'feature_coding_mode': FEATURE_CODING_MODE,
- 'encoder_type': MODELS[0]
+ 'encoder_type': MODELS[0],
+ 'gop_size': GOP_SIZE
 }
 dataset_config_path = '../'+CONFIG+'/dataset_config'+ID+'.yaml'
 with open(dataset_config_path, "w") as f:

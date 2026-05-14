@@ -39,6 +39,7 @@ if __name__ == "__main__":
     parser.add_argument("--bl_qp", default=50, type=int,help="QP value for encoding the base layer")    
     parser.add_argument("--no_analysis_in_decoder", default='OFF', type=str,help="QP value for encoding the base layer")
     parser.add_argument("--color_calibration", default='OFF', type=str,help="color_calibration")
+    parser.add_argument("--gop_size", default=100, type=int, help="GOP size for multi-reference frame coding (must match encoder setting)")
     opt = parser.parse_args()
     ################################################################################################################################################################################
     ######Setting Options###########################################################################################################################################################
@@ -81,6 +82,8 @@ if __name__ == "__main__":
     else:
         no_analysis_in_decoder_flag = ''
     color_calibration = (opt.color_calibration=='ON')
+    #GOP size for multi-reference frame coding (must match encoder)
+    gop_size = opt.gop_size
     ################################################################################################################################################################################
     #######Setting decoding translation if the encoder does not match###############################################################################################################################################
     model_dirname='../experiment/'+encoder_type+"/"+'Iframe_'+str(iframe_format) +"/"+ str(width)+'x'+str(height) +"/" +feature_coding_mode + no_analysis_in_decoder_flag 
@@ -193,11 +196,14 @@ if __name__ == "__main__":
 
     if feature_coding_mode=='AE':
         decoding_start_time = time.time()
+        Iframe_decoding_time = 0
         for frame_idx in tqdm(range(0, frames)):       
             if frame_idx % 10 == 0:
                 print(f'Decoding frame {frame_idx}/{frames}', flush=True)
             with torch.no_grad():     
-                if frame_idx in [0]:      # I-frame                      
+                if frame_idx % gop_size == 0:      # I-frame (periodic reference frame update)
+                    iframe_start = time.time()
+                    kp_decoder.rec_sem = []
                     reference, ref_bits = ref_decoder.decompress(frame_idx)  
                     
                          
@@ -229,7 +235,6 @@ if __name__ == "__main__":
                     if not no_analysis_in_decoder:
                         kp_reference = inter_coder.analysis_model(reference) 
                 
-                        # print(kp_reference)
                         if translated:
                             kp_reference_enc = encoder_analyzer(reference)
                         else:
@@ -247,7 +252,7 @@ if __name__ == "__main__":
                         if translated:
                             dec_kp_ref_frame = trans_dec(trans_enc(dec_kp_ref_frame, use_delta=True))
                         inter_coder.kp_reference_(dec_kp_ref_frame)
-                    Iframe_decoding_time = time.time() - decoding_start_time
+                    Iframe_decoding_time += time.time() - iframe_start
                 else:
                     # Decoding motion features
                     dec_kp_inter_frame, kp_bits = kp_decoder.decode_kp(frame_idx)

@@ -35,6 +35,7 @@ if __name__ == "__main__":
     parser.add_argument("--use_base_layer", default='OFF', type=str,help="Flag to use hybrid coding framework (OFF sets animation-only reconstruction)")
     parser.add_argument("--bl_qp", default=50, type=int,help="QP value for encoding the base layer")
     parser.add_argument("--no_analysis_in_decoder", default='OFF', type=str,help="QP value for encoding the base layer")
+    parser.add_argument("--gop_size", default=100, type=int, help="GOP size for multi-reference frame coding (e.g. 25, 50, 100)")
     opt = parser.parse_args()
     ################################################################################################################################################################################
     ######Setting Options###########################################################################################################################################################
@@ -70,6 +71,8 @@ if __name__ == "__main__":
     bl_qp = opt.bl_qp # ["37","42","47","52"]
     #GFVC model name
     model_name = opt.model_name
+    #GOP size for multi-reference frame coding
+    gop_size = opt.gop_size
     #Coding first frame for no analysis decoding
     no_analysis_in_decoder = (opt.no_analysis_in_decoder=='ON')
     if no_analysis_in_decoder:
@@ -136,10 +139,13 @@ if __name__ == "__main__":
    
     if feature_coding_mode=='AE':
         encoding_start_time = time.time()
+        Iframe_encoding_time = 0
         for frame_idx in tqdm(range(0, frames)):       
             with torch.no_grad():
                 current_frame = [listR[frame_idx],listG[frame_idx],listB[frame_idx]]
-                if frame_idx == 0:      # I-frame      
+                if frame_idx % gop_size == 0:      # I-frame (periodic reference frame update)
+                    iframe_start = time.time()
+                    inter_coder.rec_sem = []
                     reference, ref_bits = ref_coder.compress(current_frame, frame_idx)  
                       
                     if isinstance(reference, np.ndarray):
@@ -158,7 +164,7 @@ if __name__ == "__main__":
                     else:
                     #append to list for use in predictively coding the next frame KPs
                         inter_coder.rec_sem.append(kp_value_frame)
-                    Iframe_encoding_time = time.time() - encoding_start_time
+                    Iframe_encoding_time += time.time() - iframe_start
 
                 else:
                     inter_frame = cv2.merge(current_frame)

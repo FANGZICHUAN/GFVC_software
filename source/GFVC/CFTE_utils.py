@@ -79,7 +79,7 @@ class CFTE:
     
     def encode_kp(self,kp_list:List[str], frame_idx:int):
         ### residual
-        if frame_idx == 0:
+        if len(self.rec_sem) == 0:
             kp_difference = (np.array(kp_list)).tolist()
         else:
             kp_difference=(np.array(kp_list)-np.array(self.rec_sem[-1])).tolist()
@@ -102,10 +102,10 @@ class CFTE:
 
         kp_difference_dec=[i/self.q_step[0] for i in kp_difference_dec]
 
-        if frame_idx == 0:
+        if len(self.rec_sem) == 0:
             kp_integer,kp_value=listformat_kp_DAC([0. for _ in range(len(kp_difference_dec))], kp_difference_dec)
         else:
-            kp_integer,kp_value=listformat_kp_DAC(self.rec_sem[frame_idx-1], kp_difference_dec) #######
+            kp_integer,kp_value=listformat_kp_DAC(self.rec_sem[-1], kp_difference_dec) #######
         self.rec_sem.append(kp_integer)
   
         kp_inter_frame={}
@@ -127,7 +127,7 @@ class CFTE:
         kp_difference_dec=[i/self.q_step[0] for i in kp_difference]
         kp_difference_dec= eval('[%s]'%repr(kp_difference_dec).replace('[', '').replace(']', ''))  
    
-        if frame_idx == 0:
+        if len(self.rec_sem) == 0:
             kp_previous= [0. for _ in range(len(kp_difference_dec))]
         else:
             kp_previous= eval('[%s]'%repr(self.rec_sem[-1]).replace('[', '').replace(']', '').replace("'", ""))  
