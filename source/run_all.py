@@ -4,6 +4,7 @@ import time
 import subprocess
 import yaml
 import warnings
+import shutil
 warnings.filterwarnings('ignore')
 
 def read_config_file(config_path):
@@ -11,6 +12,19 @@ def read_config_file(config_path):
     with open(config_path) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
     return config
+
+
+def clean_experiment_folders(base_dir):
+    '''删除实验目录中的指定文件夹'''
+    folders_to_delete = ['dec', 'dec_yuv420', 'enc', 'evaluation', 'evaluation-YUV420', 'kp', 'resultBit']
+    
+    for folder in folders_to_delete:
+        folder_path = os.path.join(base_dir, folder)
+        if os.path.exists(folder_path):
+            try:
+                shutil.rmtree(folder_path)
+            except Exception as e:
+                pass
 
 
 class TaskCounter:
@@ -60,7 +74,7 @@ YUV_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences_YUV420/'
 DATASETS = ['VOXCELEB'] #
 SEQ_LIST = ['001'] #,'002','003','004','005','006','007','008','009','010','011','012','013','014','015']
 FEATURE_CODING_MODE = 'AE' 
-GOP_SIZE = 50  # GOP size for multi-reference frame coding (100 = single reference frame, i.e., frame 0 only)
+GOP_SIZE = 25  # GOP size for multi-reference frame coding (100 = single reference frame, i.e., frame 0 only)
 
 ID = '_'+os.path.basename(__file__)[:-3] + '_'.join(DATASETS) + '_'.join(SEQ_LIST) 
 
@@ -104,6 +118,11 @@ def calculate_total_tasks():
         total += len(DATASETS) * len(MODELS)
     return total
 
+# 读取编码器配置获取 qp_list
+encoder_config_path = '../'+CONFIG+'/'+MODELS[0]+'_'+DATASETS[0]+'_enc.yaml'
+encoder_config = read_config_file(encoder_config_path)
+qp_list = encoder_config.get('qp_list', [])
+
 print('\n' + '='*70)
 print('GFVC Pipeline Configuration')
 print('='*70)
@@ -111,6 +130,8 @@ print(f'Datasets: {DATASETS}')
 print(f'Sequences: {SEQ_LIST}')
 print(f'Models: {MODELS}')
 print(f'Feature Coding Mode: {FEATURE_CODING_MODE}')
+print(f'GOP Size: {GOP_SIZE}')
+print(f'QP List: {qp_list}')
 print(f'Config: {CONFIG}')
 print(f'Encode: {ENCODE}, Decode: {DECODE}, Evaluate: {EVALUATE}')
 print(f'Total Tasks: {calculate_total_tasks()}')
@@ -118,6 +139,23 @@ print('='*70 + '\n')
 
 task_counter.set_total(calculate_total_tasks())
 start_time_total = time.time()
+
+# 清理实验文件夹
+for model in MODELS:
+    config_path = '../'+CONFIG+'/'+model+"_"+DATASETS[0]+"_enc.yaml"
+    args = read_config_file(config_path)
+    Iframe_format = args['iframe_format'] 
+    feature_coding_mode = FEATURE_CODING_MODE
+    no_analysis_in_decoder = (args['no_analysis_in_decoder']=='ON')
+    if no_analysis_in_decoder:
+        assert feature_coding_mode=='AE', 'No analysis in decoder is only supported for AE feature coding mode'
+        no_analysis_in_decoder_flag = '+no_analysis_decoding'
+    else:
+        no_analysis_in_decoder_flag = ''
+    width = args['width']
+    height = args['height']
+    base_dir = '../experiment/'+model+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+'/'
+    clean_experiment_folders(base_dir)
 
 os.chdir(PATH_TO_SOURCE)
 dataset_config = {
