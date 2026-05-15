@@ -33,6 +33,7 @@ if __name__ == "__main__":
         seqlist= dataset_args['seq_list'] 
         Sequence_dir=dataset_args['sequence_dir'] 
         feature_coding_mode = dataset_args['feature_coding_mode']
+        gop_size = dataset_args.get('gop_size', 100)
         if 'encoder_type' in dataset_args:
             encoder_type = dataset_args['encoder_type']
         else:
@@ -41,6 +42,7 @@ if __name__ == "__main__":
         seqlist= args['seq_list'] 
         Sequence_dir=args['sequence_dir'] 
         feature_coding_mode = args['feature_coding_mode']
+        gop_size = args.get('gop_size', 100)
         if 'encoder_type' in args:
             encoder_type = args['encoder_type']
         else:
@@ -82,7 +84,7 @@ if __name__ == "__main__":
                 frame_idx_str = str(frame_idx).zfill(4)   
 
                 if Model in ['HDAC']:
-                    if frame_idx in [0]:      # I-frame bitstream 
+                    if frame_idx % gop_size == 0:      # I-frame bitstream (multi-reference frame support) 
                         if feature_coding_mode == 'AE':
                             Iframepath = input_bin_file_path+'/enc/'+testingdata_name+'_'+str(seq)+'_'+str(width)+'x'+str(height)+'_25fps_8bit_444_qp'+str(qplist[0])+'_bqp'+str(QP)+'/'+'frame'+frame_idx_str+'.bin'
                         elif feature_coding_mode == 'SEI':
@@ -102,7 +104,7 @@ if __name__ == "__main__":
                             overall_bits=overall_bits+os.path.getsize(interpath)*8 
 
                 elif Model in ['HDAC_Extension']:
-                    if frame_idx in [0]:      # I-frame bitstream 
+                    if frame_idx % gop_size == 0:      # I-frame bitstream (multi-reference frame support) 
                         if feature_coding_mode == 'AE':
                             Iframepath = input_bin_file_path+'/enc/'+testingdata_name+'_'+str(seq)+'_'+str(width)+'x'+str(height)+'_25fps_8bit_444_qp'+str(QP)+'_bqp'+str(bl_qplist[0])+'/'+'frame'+frame_idx_str+'.bin'
                         elif feature_coding_mode == 'SEI':
@@ -125,7 +127,7 @@ if __name__ == "__main__":
                 
                 else:       
     
-                    if frame_idx in [0]:      # I-frame bitstream 
+                    if frame_idx % gop_size == 0:      # I-frame bitstream (multi-reference frame support) 
                         if feature_coding_mode == 'AE':
                             Iframepath = input_bin_file_path+'/enc/'+testingdata_name+'_'+str(seq)+'_'+str(width)+'x'+str(height)+'_25fps_8bit_444_qp'+str(QP)+'/'+'frame'+frame_idx_str+'.bin'
                         elif feature_coding_mode == 'SEI':
