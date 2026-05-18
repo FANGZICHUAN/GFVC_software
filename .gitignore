@@ -4,6 +4,7 @@ experiment/*/*/*/*/dec
 experiment/*/*/*/*/dec_yuv420
 experiment/*/*/*/*/enc
 experiment/*/*/*/*/kp
+experiment
 source/GFVC/*/checkpoint/*.pth.tar
 source/GFVC/*/checkpoint/*.pth
 tmux.txt
@@ -12,3 +13,4 @@ tmux.txt
 CLAUDE.md
 claude.sh
 graph/graph/
+.windsurf

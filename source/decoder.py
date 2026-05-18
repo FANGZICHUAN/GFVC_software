@@ -13,6 +13,7 @@ from GFVC.FV2V_utils import *
 from GFVC.HDAC.bl_codecs import bl_decoders
 from GFVC.codecs_utils import *
 from GFVC.Translator.Paramtranscoder import *
+from GFVC.keyframe_selector import load_keyframe_metadata
 from argparse import ArgumentParser
 from skimage.transform import resize
 
@@ -134,6 +135,18 @@ if __name__ == "__main__":
     #######Codec and data preparation###############################################################################################################################################
     #Reference Image Decoder
     ref_decoder = RefereceImageDecoder(ref_input_path,qp,width=width,height=height,dec_name='vtm')
+    
+    #######智能关键帧 - 加载元数据###################################################################################################################################################
+    keyframe_idx, keyframe_list, num_keyframes = load_keyframe_metadata(cf_input_path)
+    
+    if num_keyframes > 1:
+        print(f"[Decoder] 检测到多关键帧 ({num_keyframes}个): {keyframe_list}")
+    elif keyframe_idx != 0:
+        print(f"[Decoder] 检测到智能关键帧: 第 {keyframe_idx} 帧")
+    else:
+        print(f"[Decoder] 使用默认关键帧: 第 0 帧")
+    
+    keyframe_set = set(keyframe_list)  # 用于快速查找
     # Keypoint Decoder
     if translated:
         # For feature translation, use directory path for LivePortrait
@@ -193,62 +206,126 @@ if __name__ == "__main__":
 
     if feature_coding_mode=='AE':
         decoding_start_time = time.time()
+        
+        # 预解码所有非第0帧的关键帧，用于设置参考
+        predecoded_keyframes = {}
+        if num_keyframes > 1 or (num_keyframes == 1 and keyframe_idx != 0):
+            for kf_idx in keyframe_list:
+                if kf_idx != 0:  # 第0帧会在主循环中按序处理
+                    print(f"[Decoder] 预解码关键帧 (第 {kf_idx} 帧) 用于设置参考...")
+                    with torch.no_grad():
+                        reference, ref_bits = ref_decoder.decompress(kf_idx)
+                        
+                        if isinstance(reference, np.ndarray):
+                            img_rec_out = np.transpose(reference, [2, 0, 1])
+                            reference = frame2tensor(img_rec_out)
+                        else:
+                            img_rec_out = tensor2frame(reference)
+                            reference = frame2tensor(img_rec_out)
+                        
+                        # 存储预解码的关键帧
+                        predecoded_keyframes[kf_idx] = {
+                            'img_rec': img_rec_out,
+                            'reference': reference
+                        }
+                        
+                        reference = reference.to(device)
+                        if color_calibration:
+                            mean_ref = reference.mean(dim=(2, 3)).unsqueeze(2).unsqueeze(3)
+                            std_ref = reference.std(dim=(2, 3)).unsqueeze(2).unsqueeze(3)
+                        
+                        inter_coder.reference_frame_(reference)
+                        kp_decoder.reference_frame_(reference)
+                        
+                        if not no_analysis_in_decoder:
+                            kp_reference = inter_coder.analysis_model(reference)
+                            if translated:
+                                kp_reference_enc = encoder_analyzer(reference)
+                            else:
+                                kp_reference_enc = kp_reference
+                            
+                            inter_coder.kp_reference_(kp_reference)
+                            kp_value_frame = kp_decoder.get_kp_list(kp_reference_enc, kf_idx)
+                            kp_decoder.rec_sem.append(kp_value_frame)
+                        else:
+                            dec_kp_ref_frame, kp_bits = kp_decoder.decode_kp(kf_idx)
+                            if translated:
+                                dec_kp_ref_frame = trans_dec(trans_enc(dec_kp_ref_frame, use_delta=True))
+                            inter_coder.kp_reference_(dec_kp_ref_frame)
+        
+        # 主解码循环 - 按顺序写入所有帧
         for frame_idx in tqdm(range(0, frames)):       
             if frame_idx % 10 == 0:
                 print(f'Decoding frame {frame_idx}/{frames}', flush=True)
-            with torch.no_grad():     
-                if frame_idx in [0]:      # I-frame                      
-                    reference, ref_bits = ref_decoder.decompress(frame_idx)  
-                    
-                         
-                    if isinstance(reference, np.ndarray):
-                        #convert to tensor
-                        out_fr = reference
-                        img_rec_out = np.transpose(reference,[2,0,1])
-                        #convert the HxWx3 (uint8)-> 1x3xHxW (float32) 
+            with torch.no_grad():
+                if frame_idx in keyframe_set:      # I-frame (动态关键帧索引)
+                    # 如果关键帧已预解码，直接使用；否则需要解码
+                    if frame_idx in predecoded_keyframes:
+                        # 使用预解码的关键帧
+                        img_rec_out = predecoded_keyframes[frame_idx]['img_rec']
+                        out_fr = np.transpose(img_rec_out, [1, 2, 0])  # CHW -> HWC
                         reference = frame2tensor(img_rec_out)
+                        # 关键帧的 kp_reference 已在预解码时设置
                     else:
-                        #When using LIC for reference compression we get back a tensor 1x3xHXW
-                        img_rec_out = tensor2frame(reference)
-                        out_fr = np.transpose(img_rec_out,[1,2,0])
-                        reference = frame2tensor(img_rec_out)   # normalize to 0-1 
+                        # 正常解码关键帧 (第0帧的情况)
+                        reference, ref_bits = ref_decoder.decompress(frame_idx)
+                        
+                        if isinstance(reference, np.ndarray):
+                            out_fr = reference
+                            img_rec_out = np.transpose(reference,[2,0,1])
+                            reference = frame2tensor(img_rec_out)
+                        else:
+                            img_rec_out = tensor2frame(reference)
+                            out_fr = np.transpose(img_rec_out,[1,2,0])
+                            reference = frame2tensor(img_rec_out)
+                        
+                        reference = reference.to(device)
+                        if color_calibration:
+                            mean_ref = reference.mean(dim=(2, 3)).unsqueeze(2).unsqueeze(3)
+                            std_ref = reference.std(dim=(2, 3)).unsqueeze(2).unsqueeze(3)
+                        
+                        # 解码关键帧时需要设置参考
+                        inter_coder.reference_frame_(reference)
+                        kp_decoder.reference_frame_(reference)
+                        
+                        if not no_analysis_in_decoder:
+                            kp_reference = inter_coder.analysis_model(reference)
+                            if translated:
+                                kp_reference_enc = encoder_analyzer(reference)
+                            else:
+                                kp_reference_enc = kp_reference
+                            
+                            inter_coder.kp_reference_(kp_reference)
+                            kp_value_frame = kp_decoder.get_kp_list(kp_reference_enc, frame_idx)
+                            kp_decoder.rec_sem.append(kp_value_frame)
+                        else:
+                            dec_kp_ref_frame, kp_bits = kp_decoder.decode_kp(frame_idx)
+                            if translated:
+                                dec_kp_ref_frame = trans_dec(trans_enc(dec_kp_ref_frame, use_delta=True))
+                            inter_coder.kp_reference_(dec_kp_ref_frame)
                 
                     out_video.append(out_fr)
-                    reference = reference.to(device)
-                    if color_calibration:
-                        
-                        mean_ref = reference.mean(dim=(2, 3)).unsqueeze(2).unsqueeze(3)
-                        std_ref = reference.std(dim=(2, 3)).unsqueeze(2).unsqueeze(3)
-
                     img_rec_out.tofile(f_dec)
-                     
-                    #update decoder with the reference frame info
-                    inter_coder.reference_frame_(reference)
-                    kp_decoder.reference_frame_(reference)
-
-                    if not no_analysis_in_decoder:
-                        kp_reference = inter_coder.analysis_model(reference) 
-                
-                        # print(kp_reference)
-                        if translated:
-                            kp_reference_enc = encoder_analyzer(reference)
-                        else:
-                            kp_reference_enc = kp_reference
-                    
-                        inter_coder.kp_reference_(kp_reference)
-                      
-                        #append to list for use in predictively coding the next frame KPs
-                        #KPs used for relative decoding of inter_Frame KPs
-                        kp_value_frame = kp_decoder.get_kp_list(kp_reference_enc, frame_idx)
-                        kp_decoder.rec_sem.append(kp_value_frame)
-                    else:
-                        dec_kp_ref_frame, kp_bits = kp_decoder.decode_kp(frame_idx)
-                        
-                        if translated:
-                            dec_kp_ref_frame = trans_dec(trans_enc(dec_kp_ref_frame, use_delta=True))
-                        inter_coder.kp_reference_(dec_kp_ref_frame)
                     Iframe_decoding_time = time.time() - decoding_start_time
                 else:
+                    # 多关键帧模式下，为每个P帧找到最近的关键帧作为参考
+                    if num_keyframes > 1:
+                        # 找到小于等于当前帧的最大关键帧索引
+                        valid_keyframes = [kf for kf in keyframe_list if kf <= frame_idx]
+                        nearest_kf = max(valid_keyframes) if valid_keyframes else keyframe_list[0]
+                        
+                        # 如果最近的关键帧有预解码数据，使用它作为参考
+                        if nearest_kf in predecoded_keyframes:
+                            kf_data = predecoded_keyframes[nearest_kf]
+                            ref_tensor = kf_data['reference'].to(device)
+                            inter_coder.reference_frame_(ref_tensor)
+                            kp_decoder.reference_frame_(ref_tensor)
+                            
+                            if not no_analysis_in_decoder:
+                                # 重新分析关键点
+                                kp_ref = inter_coder.analysis_model(ref_tensor)
+                                inter_coder.kp_reference_(kp_ref)
+                    
                     # Decoding motion features
                     dec_kp_inter_frame, kp_bits = kp_decoder.decode_kp(frame_idx)
                     # print(dec_kp_inter_frame)

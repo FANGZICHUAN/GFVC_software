@@ -1,9 +1,24 @@
 # +
 # get file size in python
 import os
+import json
 import numpy as np
 from argparse import ArgumentParser
 from eval_utils.utils import read_config_file
+
+def load_keyframe_list(input_bin_file_path, Model, testingdata_name, seq, width, height, QP):
+    """从元数据文件加载关键帧列表，默认为[0]"""
+    metadata_path = input_bin_file_path+'/kp/'+testingdata_name+'_'+str(seq)+'_'+str(width)+'x'+str(height)+'_25fps_8bit_444_qp'+str(QP)+'/keyframe_metadata.json'
+    if os.path.exists(metadata_path):
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+        # 优先使用新的列表格式
+        if 'keyframe_list' in metadata:
+            return metadata['keyframe_list']
+        else:
+            # 向后兼容旧格式
+            return [metadata.get('keyframe_idx', 0)]
+    return [0]
 
 def get_all_file(dir_path):
     global files
@@ -77,12 +92,19 @@ if __name__ == "__main__":
     for seqIdx, seq in enumerate(seqlist):
         for qpIdx, QP in enumerate(qp_iter):  
             overall_bits=0
+            # 加载关键帧列表（支持智能关键帧和多关键帧）
+            if Model in ['HDAC', 'HDAC_Extension']:
+                keyframe_list = [0]  # HDAC 模型固定使用第0帧
+            else:
+                keyframe_list = load_keyframe_list(input_bin_file_path, Model, testingdata_name, seq, width, height, QP)
+            keyframe_set = set(keyframe_list)
+            
             for frame_idx in range(0, frames):            
 
                 frame_idx_str = str(frame_idx).zfill(4)   
 
                 if Model in ['HDAC']:
-                    if frame_idx in [0]:      # I-frame bitstream 
+                    if frame_idx in keyframe_set:      # I-frame bitstream (动态关键帧列表) 
                         if feature_coding_mode == 'AE':
                             Iframepath = input_bin_file_path+'/enc/'+testingdata_name+'_'+str(seq)+'_'+str(width)+'x'+str(height)+'_25fps_8bit_444_qp'+str(qplist[0])+'_bqp'+str(QP)+'/'+'frame'+frame_idx_str+'.bin'
                         elif feature_coding_mode == 'SEI':
@@ -102,7 +124,7 @@ if __name__ == "__main__":
                             overall_bits=overall_bits+os.path.getsize(interpath)*8 
 
                 elif Model in ['HDAC_Extension']:
-                    if frame_idx in [0]:      # I-frame bitstream 
+                    if frame_idx in keyframe_set:      # I-frame bitstream (动态关键帧列表) 
                         if feature_coding_mode == 'AE':
                             Iframepath = input_bin_file_path+'/enc/'+testingdata_name+'_'+str(seq)+'_'+str(width)+'x'+str(height)+'_25fps_8bit_444_qp'+str(QP)+'_bqp'+str(bl_qplist[0])+'/'+'frame'+frame_idx_str+'.bin'
                         elif feature_coding_mode == 'SEI':
@@ -125,7 +147,7 @@ if __name__ == "__main__":
                 
                 else:       
     
-                    if frame_idx in [0]:      # I-frame bitstream 
+                    if frame_idx in keyframe_set:      # I-frame bitstream (动态关键帧列表) 
                         if feature_coding_mode == 'AE':
                             Iframepath = input_bin_file_path+'/enc/'+testingdata_name+'_'+str(seq)+'_'+str(width)+'x'+str(height)+'_25fps_8bit_444_qp'+str(QP)+'/'+'frame'+frame_idx_str+'.bin'
                         elif feature_coding_mode == 'SEI':

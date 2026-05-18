@@ -9,6 +9,7 @@ import numpy as np
 from tqdm import tqdm
 from GFVC.utils import *
 from GFVC.codecs_utils import *
+from GFVC.keyframe_selector import SmartKeyframeSelector, save_keyframe_metadata
 from GFVC.HDAC.bl_codecs import bl_encoders
 from argparse import ArgumentParser
 from skimage.transform import resize
@@ -35,6 +36,8 @@ if __name__ == "__main__":
     parser.add_argument("--use_base_layer", default='OFF', type=str,help="Flag to use hybrid coding framework (OFF sets animation-only reconstruction)")
     parser.add_argument("--bl_qp", default=50, type=int,help="QP value for encoding the base layer")
     parser.add_argument("--no_analysis_in_decoder", default='OFF', type=str,help="QP value for encoding the base layer")
+    parser.add_argument("--smart_keyframe", default='OFF', type=str,help="使用智能关键帧选择 (ON/OFF)")
+    parser.add_argument("--num_keyframes", default=1, type=int, help="智能关键帧数量，默认为1")
     opt = parser.parse_args()
     ################################################################################################################################################################################
     ######Setting Options###########################################################################################################################################################
@@ -77,6 +80,12 @@ if __name__ == "__main__":
         no_analysis_in_decoder_flag = '+no_analysis_decoding'
     else:
         no_analysis_in_decoder_flag = ''
+    
+    #智能关键帧选择
+    use_smart_keyframe = (opt.smart_keyframe=='ON')
+    #关键帧数量参数（从命令行获取，默认1）
+    num_keyframes = int(opt.num_keyframes)
+    print(f"[Encoder] 智能关键帧: {use_smart_keyframe}, 关键帧数量: {num_keyframes}")
     ################################################################################################################################################################################
     ######Setting directories#######################################################################################################################################################
     # Output directory
@@ -110,6 +119,28 @@ if __name__ == "__main__":
     listR,listG,listB=raw_reader_planar(original_seq, width, height,frames)
     #Initialize the GFVC model
     inter_coder = get_inter_coder(model_name)(model_config_path, model_checkpoint_path, kp_output_path,q_step, device=device)
+    
+    #######智能关键帧选择##########################################################################################################################################################
+    keyframe_list = [0]  # 默认第0帧为关键帧
+    if use_smart_keyframe:
+        print("="*60)
+        print(f"启用智能关键帧选择 (数量: {num_keyframes})...")
+        print("="*60)
+        selector = SmartKeyframeSelector(inter_coder.analysis_model, device=device, num_keyframes=num_keyframes)
+        keyframe_result = selector.select_keyframe(listR, listG, listB, width, height, frames)
+        
+        # 处理返回值可能是单个索引或列表
+        if isinstance(keyframe_result, list):
+            keyframe_list = keyframe_result
+        else:
+            keyframe_list = [keyframe_result]
+        
+        save_keyframe_metadata(keyframe_list, kp_output_path)
+        print(f"智能关键帧选择完成: {keyframe_list} 将作为 I-frames")
+        print("="*60)
+    
+    keyframe_set = set(keyframe_list)  # 用于快速查找
+    
     #Reference image coder [VTM]
     ref_coder = ReferenceImageCoder(enc_output_path,qp,iframe_format,width,height,codec_name='vtm', device=device)
     ################################################################################################################################################################################
@@ -136,31 +167,119 @@ if __name__ == "__main__":
    
     if feature_coding_mode=='AE':
         encoding_start_time = time.time()
+        Iframe_encoding_time = 0
+        
+        # 对于多关键帧，预先编码所有非第0帧的关键帧（设置参考）
+        if use_smart_keyframe and len(keyframe_list) > 1:
+            for kf_idx in keyframe_list:
+                if kf_idx != 0:  # 第0帧会在主编码循环中处理
+                    print(f"预编码关键帧 (第 {kf_idx} 帧) 用于设置参考...")
+                    with torch.no_grad():
+                        current_frame = [listR[kf_idx],listG[kf_idx],listB[kf_idx]]
+                        reference, ref_bits = ref_coder.compress(current_frame, kf_idx)
+                        
+                        if isinstance(reference, np.ndarray):
+                            reference = frame2tensor(np.transpose(reference,[2,0,1]))
+                        reference = reference.to(device)
+                        
+                        kp_reference = inter_coder.analysis_model(reference)
+                        kp_value_frame = inter_coder.get_kp_list(kp_reference, kf_idx, save=True)
+                        
+                        # 存储这个关键帧的信息，后续在主编码循环中使用
+                        if not hasattr(inter_coder, 'preencoded_keyframes'):
+                            inter_coder.preencoded_keyframes = {}
+                        inter_coder.preencoded_keyframes[kf_idx] = {
+                            'reference': reference,
+                            'kp_reference': kp_reference,
+                            'kp_value_frame': kp_value_frame
+                        }
+                        
+                        if no_analysis_in_decoder:
+                            rec_kp_frame, kp_bits = inter_coder.encode_kp(kp_value_frame, kf_idx)
+                        else:
+                            inter_coder.rec_sem.append(kp_value_frame)
+        elif use_smart_keyframe and 0 not in keyframe_list:
+            # 单关键帧且不是第0帧的情况
+            kf_idx = keyframe_list[0]
+            print(f"编码智能选择的关键帧 (第 {kf_idx} 帧)...")
+            with torch.no_grad():
+                current_frame = [listR[kf_idx],listG[kf_idx],listB[kf_idx]]
+                reference, ref_bits = ref_coder.compress(current_frame, kf_idx)
+                
+                if isinstance(reference, np.ndarray):
+                    reference = frame2tensor(np.transpose(reference,[2,0,1]))
+                reference = reference.to(device)
+                
+                kp_reference = inter_coder.analysis_model(reference)
+                kp_value_frame = inter_coder.get_kp_list(kp_reference, kf_idx, save=True)
+                
+                inter_coder.reference_frame_(reference)
+                inter_coder.kp_reference_(kp_reference)
+                
+                if no_analysis_in_decoder:
+                    rec_kp_frame, kp_bits = inter_coder.encode_kp(kp_value_frame, kf_idx)
+                else:
+                    inter_coder.rec_sem.append(kp_value_frame)
+        
+        # 辅助函数：找到最近的关键帧
+        def get_nearest_keyframe_idx(frame_idx, keyframe_list):
+            """找到小于等于frame_idx的最大关键帧索引"""
+            valid_keyframes = [kf for kf in keyframe_list if kf <= frame_idx]
+            return max(valid_keyframes) if valid_keyframes else keyframe_list[0]
+        
+        # 主编码循环 - 处理所有帧
         for frame_idx in tqdm(range(0, frames)):       
             with torch.no_grad():
                 current_frame = [listR[frame_idx],listG[frame_idx],listB[frame_idx]]
-                if frame_idx == 0:      # I-frame      
-                    reference, ref_bits = ref_coder.compress(current_frame, frame_idx)  
-                      
-                    if isinstance(reference, np.ndarray):
-                        reference = frame2tensor(np.transpose(reference,[2,0,1]))
-                    reference = reference.to(device)
-                    #Extract motion representation vectors [Keypoints | Compact features etc]
-                    kp_reference =  inter_coder.analysis_model(reference) ################ 
-                    kp_value_frame = inter_coder.get_kp_list(kp_reference, frame_idx, save=True)
-                    
-                    #update enc main with reference frame info
-                    inter_coder.reference_frame_(reference)
-                    inter_coder.kp_reference_(kp_reference)
-                    if no_analysis_in_decoder:
-                    #Encode to binary string
-                        rec_kp_frame, kp_bits = inter_coder.encode_kp(kp_value_frame, frame_idx)
+                
+                if frame_idx in keyframe_set:  # I-frame (一个或多个关键帧)
+                    # 如果是预编码的关键帧，直接使用存储的信息
+                    if hasattr(inter_coder, 'preencoded_keyframes') and frame_idx in inter_coder.preencoded_keyframes:
+                        # 从预编码缓存获取
+                        kf_data = inter_coder.preencoded_keyframes[frame_idx]
+                        reference = kf_data['reference']
+                        kp_reference = kf_data['kp_reference']
+                        kp_value_frame = kf_data['kp_value_frame']
+                        
+                        # 设置当前参考
+                        inter_coder.reference_frame_(reference)
+                        inter_coder.kp_reference_(kp_reference)
+                        
+                        if frame_idx == 0:
+                            Iframe_encoding_time = time.time() - encoding_start_time
                     else:
-                    #append to list for use in predictively coding the next frame KPs
-                        inter_coder.rec_sem.append(kp_value_frame)
-                    Iframe_encoding_time = time.time() - encoding_start_time
+                        # 正常编码关键帧
+                        reference, ref_bits = ref_coder.compress(current_frame, frame_idx)  
+                          
+                        if isinstance(reference, np.ndarray):
+                            reference = frame2tensor(np.transpose(reference,[2,0,1]))
+                        reference = reference.to(device)
+                        #Extract motion representation vectors [Keypoints | Compact features etc]
+                        kp_reference = inter_coder.analysis_model(reference) ################ 
+                        kp_value_frame = inter_coder.get_kp_list(kp_reference, frame_idx, save=True)
+                        
+                        #update enc main with reference frame info
+                        inter_coder.reference_frame_(reference)
+                        inter_coder.kp_reference_(kp_reference)
+                        
+                        if no_analysis_in_decoder:
+                            rec_kp_frame, kp_bits = inter_coder.encode_kp(kp_value_frame, frame_idx)
+                        else:
+                            inter_coder.rec_sem.append(kp_value_frame)
+                        
+                        if frame_idx == 0:
+                            Iframe_encoding_time = time.time() - encoding_start_time
 
-                else:
+                else:  # P-frame
+                    # 多关键帧模式下，为每个P帧找到最近的关键帧作为参考
+                    if use_smart_keyframe and len(keyframe_list) > 1:
+                        nearest_kf = get_nearest_keyframe_idx(frame_idx, keyframe_list)
+                        # 如果最近的关键帧不是当前已设置的参考，则更新参考
+                        if nearest_kf != frame_idx and hasattr(inter_coder, 'preencoded_keyframes') and nearest_kf in inter_coder.preencoded_keyframes:
+                            kf_data = inter_coder.preencoded_keyframes[nearest_kf]
+                            inter_coder.reference_frame_(kf_data['reference'])
+                            inter_coder.kp_reference_(kf_data['kp_reference'])
+                    
                     inter_frame = cv2.merge(current_frame)
                     inter_frame = resize(inter_frame, (width, height))[..., :3]
                     inter_frame = torch.tensor(inter_frame[np.newaxis].astype(np.float32)).permute(0, 3, 1, 2)

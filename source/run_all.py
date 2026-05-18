@@ -68,8 +68,8 @@ PATH_TO_SOURCE = os.path.abspath('.')
 PATH_TO_EVAL = os.path.abspath('../evaluate')
 CONFIG = 'config_256'
 
-MODELS = ['LVPT','CFTE','TPSMM','FV2V']
-DECODER_MODELS = ['LVPT','CFTE','TPSMM','FV2V'] 
+MODELS = ['LVPT'] #,'CFTE','TPSMM','FV2V']
+DECODER_MODELS = ['LVPT'] #,'CFTE','TPSMM','FV2V']
 MODEL_DEVICES = {'LVPT': 'cuda', 'CFTE': 'cuda', 'TPSMM': 'cuda', 'FV2V': 'cuda'}
 
 ENCODE = True
@@ -80,6 +80,11 @@ EVAL_RGB = True
 EVAL_YUV = True
 SUMMARY_RESULTS = True
 TRANSLATED = False
+
+# 智能关键帧配置
+SMART_KEYFRAME = 'ON'  # ON/OFF - 启用智能关键帧选择
+NUM_KEYFRAMES = 2  # 关键帧数量，1表示单关键帧，>1表示多关键帧
+
 ###Please specify encoder type in decoder config files if you want to execute the translated model.
 if TRANSLATED:
     pass
@@ -124,7 +129,9 @@ dataset_config = {
  'yuv_sequence_dir':YUV_SEQ_DIR,
  'seq_list':SEQ_LIST,
  'feature_coding_mode': FEATURE_CODING_MODE,
- 'encoder_type': MODELS[0]
+ 'encoder_type': MODELS[0],
+ 'smart_keyframe': SMART_KEYFRAME,
+ 'num_keyframes': NUM_KEYFRAMES
 }
 dataset_config_path = '../'+CONFIG+'/dataset_config'+ID+'.yaml'
 with open(dataset_config_path, "w") as f:

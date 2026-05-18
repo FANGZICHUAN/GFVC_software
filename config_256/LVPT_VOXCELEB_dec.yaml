@@ -11,7 +11,7 @@ iframe_format: 'YUV420'
 
 #codec params   
 inference_mode: 'decoder'
-qp_list: ["12","22","32","42"]
+qp_list: ["32"] #,"22","32","42"]
 feature_coding_mode: 'AE'
 ae_qf: [350,350]
 sei_coordinate_qf: 8
@@ -19,6 +19,7 @@ sei_matrix_qf: 4
 encoder_type: 'LVPT'
 no_analysis_in_decoder: 'OFF' 
 color_calibration: 'OFF'
+smart_keyframe: 'ON'
 
 # Stay 'OFF' for LivePortrait
 base_layer_params:

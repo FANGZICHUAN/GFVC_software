@@ -50,6 +50,14 @@ if __name__ == "__main__":
     no_analysis_in_decoder = args['no_analysis_in_decoder']
     color_calibration = args['color_calibration']
     device = opt.device if opt.device is not None else args.get('device', 'cuda')
+    # 智能关键帧参数从 dataset_config 获取（优先）或编码器配置获取
+    if opt.dataset_config is not None:
+        smart_keyframe = dataset_args.get('smart_keyframe', 'OFF')
+        num_keyframes = dataset_args.get('num_keyframes', 1)
+    else:
+        smart_keyframe = args.get('smart_keyframe', 'OFF')
+        num_keyframes = args.get('num_keyframes', 1)
+    print(f"[Run] 智能关键帧: {smart_keyframe}, 关键帧数量: {num_keyframes}")
 
 
     if 'encoder_type' in args:
@@ -63,12 +71,12 @@ if __name__ == "__main__":
                 cmd = "./run.sh "+model_name+" "+coding_mode+" "+original_seq+" "+str(frames)+" "+str(qp)+" "+str(iframe_format) +" "+ \
                                                                                 str(height) +" "+str(width) +" "+str(feature_coding_mode) +" "+ \
                                                                                 str(ae_qf_1) +" "+str(ae_qf_2) +" "+str(sei_coordinate_qf) +" "+str(sei_matrix_qf) +" " + \
-                                                                                str(no_analysis_in_decoder) +" " 
+                                                                                str(no_analysis_in_decoder) +" "
                 for blqp in bl_qplist:
                     cmd_blqp = cmd +  use_base_layer + " "+ str(blqp) + " "
                     if coding_mode == 'decoder':
                         cmd_blqp = cmd_blqp + encoder_type+ " "+str(color_calibration) +" "
-                    cmd_blqp = cmd_blqp + str(device) + " "
+                    cmd_blqp = cmd_blqp + str(device) + " " + str(smart_keyframe) + " " + str(num_keyframes) + " "
                     subprocess.run(cmd_blqp, shell=True, check=True)
                     if model_name in ['CFTE','FV2V','FOMM', 'DAC', 'TPSMM']:    
                         print(model_name+"_"+coding_mode+"_"+testingdata_name+"_"+seq+"_QP"+str(qp)+" Finished")
