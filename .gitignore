@@ -8,5 +8,4 @@ tmux.txt
 *.pyc
 CLAUDE.md
 claude.sh
-graph/graph/
 .windsurf/

@@ -11,7 +11,7 @@ iframe_format: 'YUV420'   ## 'YUV420'  OR 'RGB444' ###You need to define what co
 
 #codec params   
 inference_mode: 'encoder'           ## "Encoder" OR 'Decoder'   ###You need to define whether to encode or decode a sequence.
-qp_list: ["22"] #,"22","32","42"]
+qp_list: ["4","11","20","25","29"]
 feature_coding_mode: 'AE' # AE or SEI
 ae_qf: [256,256] #Number of bins for KP coding
 sei_coordinate_qf: 8
