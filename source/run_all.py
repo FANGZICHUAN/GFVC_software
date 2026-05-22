@@ -71,8 +71,8 @@ def run_stage(command, stage_name, model=None):
 #dataset params 
 RGB_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences/'  ###You should download the testing sequence and modify the dir.
 YUV_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences_YUV420/'
-DATASETS = ['VOXCELEB'] #
-SEQ_LIST = ['001'] #,'004','007','010','013'] #,'006','007','008','009','010','011','012','013','014','015']
+DATASETS = ['RAVDESS'] #
+SEQ_LIST = ['005'] #,'004','007','010','013'] #,'006','007','008','009','010','011','012','013','014','015']
 FEATURE_CODING_MODE = 'AE' 
 GOP_SIZE = 50  # GOP size for multi-reference frame coding (100 = single reference frame, i.e., frame 0 only)
 
