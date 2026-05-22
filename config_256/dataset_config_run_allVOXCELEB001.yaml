@@ -1,6 +1,0 @@
-encoder_type: LVPT
-feature_coding_mode: AE
-seq_list:
-- '001'
-sequence_dir: /home/fangzichuan/GFVC_Software/testing_sequences/
-yuv_sequence_dir: /home/fangzichuan/GFVC_Software/testing_sequences_YUV420/

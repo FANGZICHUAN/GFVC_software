@@ -55,10 +55,10 @@ def run_stage(command, stage_name, model=None):
 ############################Please Specify Your Configuration Here########################################
 
 #dataset params 
-RGB_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences/'  ###You should download the testing sequence and modify the dir.
+RGB_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences/'
 YUV_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences_YUV420/'
-DATASETS = ['VOXCELEB'] #
-SEQ_LIST = ['001']#,'002','003','004','005','006','007','008','009','010','011','012','013','014','015']
+DATASETS = ['RAVDESS'] #
+SEQ_LIST = ['005']#,'002','003','004','005','006','007','008','009','010','011','012','013','014','015']
 FEATURE_CODING_MODE = 'AE' 
 
 ID = '_'+os.path.basename(__file__)[:-3] + '_'.join(DATASETS) + '_'.join(SEQ_LIST) 
@@ -77,7 +77,7 @@ DECODE = True
 EVALUATE = True
 RGB2YUV = True
 EVAL_RGB = True
-EVAL_YUV = True
+EVAL_YUV = False
 SUMMARY_RESULTS = True
 TRANSLATED = False
 ###Please specify encoder type in decoder config files if you want to execute the translated model.

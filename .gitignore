@@ -1,9 +1,6 @@
 testing_sequences/
 testing_sequences_YUV420/
-experiment/*/*/*/*/dec
-experiment/*/*/*/*/dec_yuv420
-experiment/*/*/*/*/enc
-experiment/*/*/*/*/kp
+experiment
 source/GFVC/*/checkpoint/*.pth.tar
 source/GFVC/*/checkpoint/*.pth
 tmux.txt
@@ -11,4 +8,4 @@ tmux.txt
 *.pyc
 CLAUDE.md
 claude.sh
-graph/graph/
+.windsurf
