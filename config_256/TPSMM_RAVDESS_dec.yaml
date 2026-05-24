@@ -1,0 +1,29 @@
+codec_name: 'TPSMM'
+
+#dataset params 
+dataset: 'RAVDESS'
+num_frames: 100
+
+#video params   
+height: 256
+width: 256
+iframe_format: 'YUV420'
+
+#codec params   
+inference_mode: 'decoder'
+qp_list: ["8","25","46","50","52"]
+feature_coding_mode: 'AE'
+ae_qf: [256,256]
+sei_coordinate_qf: 8
+sei_matrix_qf: 4
+encoder_type: 'TPSMM'
+no_analysis_in_decoder: 'OFF' 
+color_calibration: 'OFF'
+
+# Stay 'OFF' for TPSMM
+base_layer_params:
+  use_base_layer: 'OFF'
+  qp: [0] 
+
+#evaluation params
+metrics: ['psnr', 'ssim', 'lpips', 'dists', 'tlp', 'id_similarity', 'lmd', 'delta_e']

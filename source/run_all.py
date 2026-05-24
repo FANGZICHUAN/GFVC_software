@@ -57,8 +57,8 @@ def run_stage(command, stage_name, model=None):
 #dataset params 
 RGB_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences/'  ###You should download the testing sequence and modify the dir.
 YUV_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences_YUV420/'
-DATASETS = ['VOXCELEB'] #
-SEQ_LIST = ['001']#,'002','003','004','005','006','007','008','009','010','011','012','013','014','015']
+DATASETS = ['RAVDESS'] #
+SEQ_LIST = ['005']#,'002','003','004','005','006','007','008','009','010','011','012','013','014','015']
 FEATURE_CODING_MODE = 'AE' 
 
 ID = '_'+os.path.basename(__file__)[:-3] + '_'.join(DATASETS) + '_'.join(SEQ_LIST) 
@@ -83,7 +83,7 @@ TRANSLATED = False
 
 # 智能关键帧配置
 SMART_KEYFRAME = 'ON'  # ON/OFF - 启用智能关键帧选择
-NUM_KEYFRAMES = 2  # 关键帧数量，1表示单关键帧，>1表示多关键帧
+NUM_KEYFRAMES = 1  # 关键帧数量，1表示单关键帧，>1表示多关键帧
 
 ###Please specify encoder type in decoder config files if you want to execute the translated model.
 if TRANSLATED:
