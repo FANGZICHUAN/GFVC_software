@@ -69,7 +69,7 @@ PATH_TO_EVAL = os.path.abspath('../evaluate')
 CONFIG = 'config_256'
 
 MODELS = ['LVPT','CFTE','TPSMM','FV2V']
-DECODER_MODELS = ['LVPT','CFTE','TPSMM','FV2V'] 
+DECODER_MODELS = ['LVPT','CFTE','TPSMM','FV2V']
 MODEL_DEVICES = {'LVPT': 'cuda', 'CFTE': 'cuda', 'TPSMM': 'cuda', 'FV2V': 'cuda'}
 
 ENCODE = True
@@ -278,6 +278,18 @@ if SUMMARY_RESULTS:
                                     words=line.split()
                                     for num in range(len(qp_iter)):
                                         f.write(words[num]+ '\n')
+
+                # GMACs Profiling
+                try:
+                    from profile_gmacs import profile_model_gmacs
+                    encode_gmacs, decode_gmacs, total_gmacs, params = profile_model_gmacs(model, config_path, device='cpu')
+                    f.write('########## '+model+'_GMACs_Complexity ##########'+ '\n')
+                    f.write(f'Encode GMACs: {encode_gmacs:.4f} G\n')
+                    f.write(f'Decode GMACs: {decode_gmacs:.4f} G\n')
+                    f.write(f'Total GMACs: {total_gmacs:.4f} G\n')
+                    f.write(f'Parameters: {params:.4f} M\n')
+                except Exception as e:
+                    print(f'Warning: Could not compute GMACs for {model}: {e}')
 
 os.remove(dataset_config_path)
 
