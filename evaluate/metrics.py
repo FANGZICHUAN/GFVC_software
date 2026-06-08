@@ -74,7 +74,13 @@ if __name__ == "__main__":
         no_analysis_in_decoder_flag = '+no_analysis_decoding'
     else:
         no_analysis_in_decoder_flag = ''
-
+    
+    # Check for closed-loop encoding mode
+    if opt.dataset_config is not None and 'closed_loop_encoding' in dataset_args:
+        closed_loop_encoding = (dataset_args['closed_loop_encoding'] == 'ON')
+    else:
+        closed_loop_encoding = args.get('closed_loop_encoding', 'OFF') == 'ON'
+    closed_loop_flag = '+closed_loop' if closed_loop_encoding else ''
 
     if encoder_type != Model:
         translated =True
@@ -85,14 +91,14 @@ if __name__ == "__main__":
 
     if Model in ['HDAC', 'HDAC_Extension']:
         bl_qplist = args['base_layer_params']['qp']
-        base_dir = '../experiment/'+Model+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+'/'
+        base_dir = '../experiment/'+Model+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+closed_loop_flag+'/'
         result_dir = base_dir+'/evaluation/' 
     else:
         if translated:
-            base_dir = '../experiment/'+encoder_type+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+'/'
+            base_dir = '../experiment/'+encoder_type+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+closed_loop_flag+'/'
             result_dir = base_dir+'/evaluation_'+Model+'_dec/'
         else:   
-            base_dir = '../experiment/'+Model+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+'/'
+            base_dir = '../experiment/'+Model+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+closed_loop_flag+'/'
             result_dir = base_dir+'/evaluation/'
 
     

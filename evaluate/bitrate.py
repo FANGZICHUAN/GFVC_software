@@ -57,6 +57,17 @@ if __name__ == "__main__":
     Model=args['codec_name']  ## 'FV2V' OR 'FOMM' OR 'CFTE'
     Iframe_format=args['iframe_format']   ## 'YUV420'  OR 'RGB444'
     no_analysis_in_decoder = (args['no_analysis_in_decoder']=='ON')
+    if no_analysis_in_decoder:
+        no_analysis_in_decoder_flag = '+no_analysis_decoding'
+    else:
+        no_analysis_in_decoder_flag = ''
+    
+    # Check for closed-loop encoding mode
+    if opt.dataset_config is not None and 'closed_loop_encoding' in dataset_args:
+        closed_loop_encoding = (dataset_args['closed_loop_encoding'] == 'ON')
+    else:
+        closed_loop_encoding = args.get('closed_loop_encoding', 'OFF') == 'ON'
+    closed_loop_flag = '+closed_loop' if closed_loop_encoding else ''
 
     if Model in ['HDAC', 'HDAC_Extension']:
         bl_qplist = args['base_layer_params']['qp']
@@ -67,8 +78,8 @@ if __name__ == "__main__":
         qp_iter = qplist
 
 
-    input_bin_file_path='../experiment/'+str(Model)+'/Iframe_'+str(Iframe_format)+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode
-    save_path='../experiment/'+str(Model)+'/Iframe_'+str(Iframe_format)+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+"/resultBit/"
+    input_bin_file_path='../experiment/'+str(Model)+'/Iframe_'+str(Iframe_format)+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+closed_loop_flag
+    save_path='../experiment/'+str(Model)+'/Iframe_'+str(Iframe_format)+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+closed_loop_flag+"/resultBit/"
     os.makedirs(save_path, exist_ok=True)
 
 

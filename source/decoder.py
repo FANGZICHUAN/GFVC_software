@@ -39,6 +39,7 @@ if __name__ == "__main__":
     parser.add_argument("--bl_qp", default=50, type=int,help="QP value for encoding the base layer")    
     parser.add_argument("--no_analysis_in_decoder", default='OFF', type=str,help="QP value for encoding the base layer")
     parser.add_argument("--color_calibration", default='OFF', type=str,help="color_calibration")
+    parser.add_argument("--closed_loop_encoding", default='OFF', type=str,help="Encoder used closed-loop mode (affects path naming)")
     opt = parser.parse_args()
     ################################################################################################################################################################################
     ######Setting Options###########################################################################################################################################################
@@ -81,9 +82,12 @@ if __name__ == "__main__":
     else:
         no_analysis_in_decoder_flag = ''
     color_calibration = (opt.color_calibration=='ON')
+    #Check if encoder used closed-loop mode (for path naming)
+    closed_loop_encoding = (opt.closed_loop_encoding=='ON')
+    closed_loop_flag = '+closed_loop' if closed_loop_encoding else ''
     ################################################################################################################################################################################
     #######Setting decoding translation if the encoder does not match###############################################################################################################################################
-    model_dirname='../experiment/'+encoder_type+"/"+'Iframe_'+str(iframe_format) +"/"+ str(width)+'x'+str(height) +"/" +feature_coding_mode + no_analysis_in_decoder_flag 
+    model_dirname='../experiment/'+encoder_type+"/"+'Iframe_'+str(iframe_format) +"/"+ str(width)+'x'+str(height) +"/" +feature_coding_mode + no_analysis_in_decoder_flag + closed_loop_flag 
     if encoder_type != model_name:
         translated =True
         assert feature_coding_mode == 'AE', 'Feature translation only supported for AE'
@@ -156,14 +160,26 @@ if __name__ == "__main__":
         # kp_decoder only performs arithmetic decoding (decode_kp / rec_sem bookkeeping);
         # for LivePortrait skip network init to avoid loading ~2GB of weights twice
         # (the heavy reconstruction path uses the separate `inter_coder` below).
+        # 【闭环模式例外】闭环模式需要完整网络支持
         if model_name == 'LVPT' or model_name == 'LivePortrait':
-            kp_decoder = get_inter_coder(model_name)(
-                model_config_path=None,
-                model_checkpoint_path=None,
-                kp_output_dir=cf_input_path,
-                q_step=q_step,
-                device=device,
-            )
+            if closed_loop_encoding:
+                # 闭环模式需要完整网络
+                kp_decoder = get_inter_coder(model_name)(
+                    model_config_path=f'./GFVC/{model_dir_name}/checkpoint/{model_dir_name}.yaml',
+                    model_checkpoint_path=None,  # 使用默认checkpoint路径
+                    kp_output_dir=cf_input_path,
+                    q_step=q_step,
+                    device=device,
+                )
+            else:
+                # 传统模式不需要网络
+                kp_decoder = get_inter_coder(model_name)(
+                    model_config_path=None,
+                    model_checkpoint_path=None,
+                    kp_output_dir=cf_input_path,
+                    q_step=q_step,
+                    device=device,
+                )
         else:
             kp_decoder = get_inter_coder(model_name)(
                 model_config_path=f'./GFVC/{model_dir_name}/checkpoint/{model_dir_name}.yaml' if model_name in ['FV2V', 'TPSMM'] else None,
@@ -173,7 +189,8 @@ if __name__ == "__main__":
                 device=device,
             )
     #Reconstruction models
-    inter_coder = get_inter_coder(model_name)(model_config_path, model_checkpoint_path, device=device)
+    # 【关键】传入q_step确保与编码端一致
+    inter_coder = get_inter_coder(model_name)(model_config_path, model_checkpoint_path, device=device, q_step=q_step)
     out_video = []
     ################################################################################################################################################################################
     #######AE feature coding mode###################################################################################################################################################
@@ -226,31 +243,64 @@ if __name__ == "__main__":
                     inter_coder.reference_frame_(reference)
                     kp_decoder.reference_frame_(reference)
 
-                    if not no_analysis_in_decoder:
+                    if closed_loop_encoding:
+                        # 【I帧闭环处理】先解码参数，设置kp_reference，然后做闭环提取
+                        # Step 1: 解码I帧参数
+                        dec_kp_ref_frame, kp_bits = kp_decoder.decode_kp(frame_idx)
+                        if translated:
+                            dec_kp_ref_frame = trans_dec(trans_enc(dec_kp_ref_frame, use_delta=True))
+                        # Step 2: 设置kp_reference（用于warping）
+                        inter_coder.kp_reference_(dec_kp_ref_frame)
+                        kp_decoder.kp_reference_(dec_kp_ref_frame)
+                        # Step 3: 闭环提取（生成画面，从画面提取新参数）
+                        # 手动做闭环提取，因为decode_kp_closed_loop需要kp_reference已设置
+                        with torch.no_grad():
+                            kp_driving = kp_decoder._transform_keypoints(dec_kp_ref_frame)
+                            warped_features = kp_decoder.warping_network(
+                                feature_3d=kp_decoder.ref_appearance_features,
+                                kp_driving=kp_driving,
+                                kp_source=kp_decoder.kp_reference
+                            )
+                            reconstructed_frame = kp_decoder.spade_generator(warped_features['out'])
+                            # 从重建画面提取运动参数
+                            new_motion_output = kp_decoder.motion_extractor(reconstructed_frame)
+                            new_motion_output = kp_decoder._normalize_motion_output(new_motion_output)
+                            # 转换为列表并量化
+                            new_kp_flat = new_motion_output['kp'].flatten().cpu().numpy().tolist()
+                            new_exp_flat = new_motion_output['exp'].flatten().cpu().numpy().tolist()
+                            new_scale_flat = new_motion_output['scale'].flatten().cpu().numpy().tolist()
+                            new_t_flat = new_motion_output['t'].flatten().cpu().numpy().tolist()
+                            new_pitch_v = float(new_motion_output['pitch'].flatten()[0].item())
+                            new_yaw_v = float(new_motion_output['yaw'].flatten()[0].item())
+                            new_roll_v = float(new_motion_output['roll'].flatten()[0].item())
+                            new_params_list = new_kp_flat + new_exp_flat + new_scale_flat + new_t_flat + [new_pitch_v, new_yaw_v, new_roll_v]
+                            new_params_quantized = [int(round(x * kp_decoder.q_step[0])) for x in new_params_list]
+                            # 【关键】将闭环提取的参数存入rec_sem供P帧使用
+                            kp_decoder.rec_sem.append(new_params_quantized)
+                    elif not no_analysis_in_decoder:
+                        # 传统模式：直接分析参考帧
                         kp_reference = inter_coder.analysis_model(reference) 
-                
-                        # print(kp_reference)
                         if translated:
                             kp_reference_enc = encoder_analyzer(reference)
                         else:
                             kp_reference_enc = kp_reference
-                    
                         inter_coder.kp_reference_(kp_reference)
-                      
-                        #append to list for use in predictively coding the next frame KPs
-                        #KPs used for relative decoding of inter_Frame KPs
                         kp_value_frame = kp_decoder.get_kp_list(kp_reference_enc, frame_idx)
                         kp_decoder.rec_sem.append(kp_value_frame)
                     else:
+                        # no_analysis_in_decoder=True模式：从码流解码
                         dec_kp_ref_frame, kp_bits = kp_decoder.decode_kp(frame_idx)
-                        
                         if translated:
                             dec_kp_ref_frame = trans_dec(trans_enc(dec_kp_ref_frame, use_delta=True))
                         inter_coder.kp_reference_(dec_kp_ref_frame)
                     Iframe_decoding_time = time.time() - decoding_start_time
                 else:
                     # Decoding motion features
-                    dec_kp_inter_frame, kp_bits = kp_decoder.decode_kp(frame_idx)
+                    # 闭环模式下使用闭环解码
+                    if closed_loop_encoding:
+                        dec_kp_inter_frame, kp_bits = kp_decoder.decode_kp_closed_loop(frame_idx)
+                    else:
+                        dec_kp_inter_frame, kp_bits = kp_decoder.decode_kp(frame_idx)
                     # print(dec_kp_inter_frame)
                     # Inter_frame reconstruction through animation
                 

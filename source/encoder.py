@@ -35,6 +35,7 @@ if __name__ == "__main__":
     parser.add_argument("--use_base_layer", default='OFF', type=str,help="Flag to use hybrid coding framework (OFF sets animation-only reconstruction)")
     parser.add_argument("--bl_qp", default=50, type=int,help="QP value for encoding the base layer")
     parser.add_argument("--no_analysis_in_decoder", default='OFF', type=str,help="QP value for encoding the base layer")
+    parser.add_argument("--closed_loop_encoding", default='OFF', type=str,help="Use closed-loop encoding: generate reconstructed frame after encoding and use extracted motion params for next frame prediction (experimental)")
     opt = parser.parse_args()
     ################################################################################################################################################################################
     ######Setting Options###########################################################################################################################################################
@@ -77,10 +78,18 @@ if __name__ == "__main__":
         no_analysis_in_decoder_flag = '+no_analysis_decoding'
     else:
         no_analysis_in_decoder_flag = ''
+    
+    #Closed-loop encoding mode (experimental)
+    closed_loop_encoding = (opt.closed_loop_encoding=='ON')
+    if closed_loop_encoding:
+        assert feature_coding_mode=='AE', 'Closed-loop encoding is only supported for AE feature coding mode'
+        assert no_analysis_in_decoder==False, 'Closed-loop encoding is incompatible with no_analysis_in_decoder'
+        print(f'--Using Closed-Loop Encoding Mode--')
     ################################################################################################################################################################################
     ######Setting directories#######################################################################################################################################################
     # Output directory
-    model_dirname=f'../experiment/'+model_name+"/"+'Iframe_'+str(iframe_format) +"/"+ str(width)+'x'+str(height) +"/" + feature_coding_mode+no_analysis_in_decoder_flag +"/"       
+    closed_loop_flag = '+closed_loop' if closed_loop_encoding else ''
+    model_dirname=f'../experiment/'+model_name+"/"+'Iframe_'+str(iframe_format) +"/"+ str(width)+'x'+str(height) +"/" + feature_coding_mode+no_analysis_in_decoder_flag + closed_loop_flag +"/"          
     #Initialize the codec with models
     # Map LVPT to LivePortrait for file paths
     model_dir_name = 'LivePortrait' if model_name == 'LVPT' else model_name
@@ -157,7 +166,11 @@ if __name__ == "__main__":
                         rec_kp_frame, kp_bits = inter_coder.encode_kp(kp_value_frame, frame_idx)
                     else:
                     #append to list for use in predictively coding the next frame KPs
-                        inter_coder.rec_sem.append(kp_value_frame)
+                        # 【闭环模式】I帧也需要闭环处理，与P帧保持一致
+                        if closed_loop_encoding:
+                            rec_kp_frame, _ = inter_coder.encode_kp_closed_loop(kp_value_frame, frame_idx)
+                        else:
+                            inter_coder.rec_sem.append(kp_value_frame)
                     Iframe_encoding_time = time.time() - encoding_start_time
 
                 else:
@@ -169,8 +182,19 @@ if __name__ == "__main__":
                     kp_inter_frame = inter_coder.analysis_model(inter_frame) ################
     
                     kp_frame = inter_coder.get_kp_list(kp_inter_frame, frame_idx, save=True)
-                    #Encode to binary string
-                    rec_kp_frame, kp_bits = inter_coder.encode_kp(kp_frame, frame_idx)
+                    
+                    # Encode with closed-loop or open-loop mode
+                    if closed_loop_encoding and frame_idx > 0:
+                        # Closed-loop: Use reconstructed params from previous frame as reference
+                        # Step 1: Encode current frame with closed-loop method
+                        rec_kp_frame, kp_bits = inter_coder.encode_kp_closed_loop(kp_frame, frame_idx)
+                        
+                        # Step 2: Reconstruct frame using the encoded params to update reference
+                        # This is only for encoder state tracking; the actual frame generation 
+                        # happens at decoder. Here we just maintain the motion parameter chain.
+                    else:
+                        # Open-loop: Traditional GFVC encoding
+                        rec_kp_frame, kp_bits = inter_coder.encode_kp(kp_frame, frame_idx)
                
         total_encoding_time = time.time() - encoding_start_time
         print(f'Encoding time: {total_encoding_time:.2f}s, I-frame encoding time: {Iframe_encoding_time:.2f}s, p-frame encoding time: {(total_encoding_time-Iframe_encoding_time):.2f}s')

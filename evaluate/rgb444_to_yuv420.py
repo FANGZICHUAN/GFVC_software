@@ -108,6 +108,13 @@ if __name__ == "__main__":
         no_analysis_in_decoder_flag = '+no_analysis_decoding'
     else:
         no_analysis_in_decoder_flag = ''
+    
+    # Check for closed-loop encoding mode
+    if opt.dataset_config is not None and 'closed_loop_encoding' in dataset_args:
+        closed_loop_encoding = (dataset_args['closed_loop_encoding'] == 'ON')
+    else:
+        closed_loop_encoding = args.get('closed_loop_encoding', 'OFF') == 'ON'
+    closed_loop_flag = '+closed_loop' if closed_loop_encoding else ''
 
 
     Iframe_format=args['iframe_format'] ## 'YUV420'  OR 'RGB444'
@@ -126,11 +133,11 @@ if __name__ == "__main__":
         translated = False
     
     if translated:
-        base_dir = '../experiment/'+encoder_type+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+'/'+Model+'_dec/'
-        result_dir = '../experiment/'+encoder_type+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+'/'+Model+'_dec_yuv420/'
+        base_dir = '../experiment/'+encoder_type+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+closed_loop_flag+'/'+Model+'_dec/'
+        result_dir = '../experiment/'+encoder_type+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+closed_loop_flag+'/'+Model+'_dec_yuv420/'
     else:
-        base_dir = '../experiment/'+Model+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+'/dec/'
-        result_dir = '../experiment/'+Model+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+'/dec_yuv420/'
+        base_dir = '../experiment/'+Model+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+closed_loop_flag+'/dec/'
+        result_dir = '../experiment/'+Model+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+closed_loop_flag+'/dec_yuv420/'
     os.makedirs(result_dir,exist_ok=True)     
 
     

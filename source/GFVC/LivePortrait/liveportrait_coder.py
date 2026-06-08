@@ -395,3 +395,254 @@ class LivePortraitCoder:
         kp_bits = os.path.getsize(bin_path) * 8
         
         return dec_motion, kp_bits
+
+    def decode_kp_closed_loop(self, frame_idx):
+        """
+        闭环解码模式：解码参数后，用其生成画面，并从画面提取新参数作为参考。
+        这与编码端的闭环逻辑对应，确保编解码端的rec_sem一致。
+        """
+        # 1. 先进行标准解码得到重建参数
+        dec_motion, kp_bits = self.decode_kp(frame_idx)
+        
+        # 2. 【闭环关键】用解码参数生成画面，并从画面提取新参数
+        with torch.no_grad():
+            kp_driving = self._transform_keypoints(dec_motion)
+            warped_features = self.warping_network(
+                feature_3d=self.ref_appearance_features,
+                kp_driving=kp_driving,
+                kp_source=self.kp_reference
+            )
+            reconstructed_frame = self.spade_generator(warped_features['out'])
+            
+            # 从重建画面提取运动参数
+            new_motion_output = self.motion_extractor(reconstructed_frame)
+            new_motion_output = self._normalize_motion_output(new_motion_output)
+            
+            new_kp_flat = new_motion_output['kp'].flatten().cpu().numpy().tolist()
+            new_exp_flat = new_motion_output['exp'].flatten().cpu().numpy().tolist()
+            new_scale_flat = new_motion_output['scale'].flatten().cpu().numpy().tolist()
+            new_t_flat = new_motion_output['t'].flatten().cpu().numpy().tolist()
+            new_pitch_v = float(new_motion_output['pitch'].flatten()[0].item())
+            new_yaw_v = float(new_motion_output['yaw'].flatten()[0].item())
+            new_roll_v = float(new_motion_output['roll'].flatten()[0].item())
+            
+            new_params_list = new_kp_flat + new_exp_flat + new_scale_flat + new_t_flat + [new_pitch_v, new_yaw_v, new_roll_v]
+            
+            # 更新rec_sem为从重建画面提取的参数（替换最后存入的值）
+            new_params_quantized = [int(round(x * self.q_step[0])) for x in new_params_list]
+            self.rec_sem[-1] = new_params_quantized
+        
+        return dec_motion, kp_bits
+
+    # -------------------------------------------------------------------------
+    # Closed-loop Encoding Support (Experimental)
+    # -------------------------------------------------------------------------
+    def reconstruct_and_update(self, frame_idx: int) -> torch.Tensor:
+        """
+        使用前一帧的重建运动参数生成画面，并从中提取新的运动参数作为参考。
+        这是闭环预测的核心：编码端模拟解码端的行为。
+        
+        Returns:
+            reconstructed_params: 从重建画面中提取的运动参数列表
+        """
+        with torch.no_grad():
+            # 1. 获取前一帧的重建运动参数（已量化+反量化）
+            if len(self.rec_sem) == 0:
+                raise RuntimeError("No previous reconstructed parameters available")
+            
+            prev_reconstructed_quantized = self.rec_sem[-1]
+            
+            # 2. 将量化值反量化为浮点参数
+            prev_params = [x / self.q_step[0] for x in prev_reconstructed_quantized]
+            
+            # 3. 组装为dec_motion格式
+            num_kp = self.num_kp
+            kp_size = 3 * num_kp
+            
+            kp_tensor = torch.tensor(prev_params[:kp_size]).view(1, num_kp, 3).float().to(self.device)
+            exp_tensor = torch.tensor(prev_params[kp_size:2*kp_size]).view(1, num_kp, 3).float().to(self.device)
+            scale_tensor = torch.tensor(prev_params[2*kp_size:2*kp_size+1]).view(1, 1).float().to(self.device) if len(prev_params) > 2*kp_size else torch.ones(1, 1).to(self.device)
+            t_tensor = torch.tensor(prev_params[2*kp_size+1:2*kp_size+4]).view(1, 3).float().to(self.device) if len(prev_params) > 2*kp_size+1 else torch.zeros(1, 3).to(self.device)
+            
+            pose_start = 2*kp_size + 4
+            pitch_tensor = torch.tensor(prev_params[pose_start:pose_start+1]).float().to(self.device) if len(prev_params) > pose_start else torch.zeros(1).to(self.device)
+            yaw_tensor = torch.tensor(prev_params[pose_start+1:pose_start+2]).float().to(self.device) if len(prev_params) > pose_start+1 else torch.zeros(1).to(self.device)
+            roll_tensor = torch.tensor(prev_params[pose_start+2:pose_start+3]).float().to(self.device) if len(prev_params) > pose_start+2 else torch.zeros(1).to(self.device)
+            
+            dec_motion = {
+                'kp': kp_tensor,
+                'exp': exp_tensor,
+                'scale': scale_tensor,
+                't': t_tensor,
+                'pitch': pitch_tensor,
+                'yaw': yaw_tensor,
+                'roll': roll_tensor,
+            }
+            
+            # 4. 使用当前参考生成画面
+            if self.ref_appearance_features is None:
+                raise RuntimeError("Reference appearance features not set. Call reference_frame_() first.")
+            if self.kp_reference is None:
+                raise RuntimeError("Reference keypoints not set. Call kp_reference_() first.")
+            
+            # 生成画面（模拟解码端）
+            kp_driving = self._transform_keypoints(dec_motion)
+            warped_features = self.warping_network(
+                feature_3d=self.ref_appearance_features,
+                kp_driving=kp_driving,
+                kp_source=self.kp_reference
+            )
+            reconstructed_frame = self.spade_generator(warped_features['out'])
+            
+            # 5. 从重建画面提取运动参数
+            new_motion_output = self.motion_extractor(reconstructed_frame)
+            new_motion_output = self._normalize_motion_output(new_motion_output)
+            
+            # 6. 转换为参数列表
+            new_kp_flat = new_motion_output['kp'].flatten().cpu().numpy().tolist()
+            new_exp_flat = new_motion_output['exp'].flatten().cpu().numpy().tolist()
+            new_scale_flat = new_motion_output['scale'].flatten().cpu().numpy().tolist()
+            new_t_flat = new_motion_output['t'].flatten().cpu().numpy().tolist()
+            new_pitch_v = float(new_motion_output['pitch'].flatten()[0].item())
+            new_yaw_v = float(new_motion_output['yaw'].flatten()[0].item())
+            new_roll_v = float(new_motion_output['roll'].flatten()[0].item())
+            
+            new_params_list = new_kp_flat + new_exp_flat + new_scale_flat + new_t_flat + [new_pitch_v, new_yaw_v, new_roll_v]
+            
+            return new_params_list, reconstructed_frame
+
+    def encode_kp_closed_loop(self, kp_list, frame_idx: int):
+        """
+        闭环编码模式：使用从重建画面提取的参数作为残差计算的参考
+        
+        关键区别：
+        - 传统GFVC：rec_sem存储原始参数+残差重建值（参数空间闭环）
+        - 此模式：rec_sem存储从重建画面提取的新参数（像素空间闭环）
+        
+        流程：
+        1. 从rec_sem获取前一帧从重建画面提取的参考参数
+        2. 当前帧原始参数与参考参数计算残差
+        3. 编码残差
+        4. 重建当前帧参数（从重建画面提取并存储到rec_sem供下一帧使用）
+        """
+        # 量化当前帧原始参数
+        quantized_current = [int(round(x * self.q_step[0])) for x in kp_list]
+        
+        if frame_idx == 0:
+            # I帧：编码原始参数，但从重建画面提取参数存入rec_sem供下一帧参考
+            # Step 1: 编码I帧原始参数（残差为0）
+            bin_path = os.path.join(self.kp_output_dir, 'frame' + str(frame_idx).zfill(4) + '.bin')
+            final_encoder_expgolomb(quantized_current.copy(), bin_path)
+            kp_bits = os.path.getsize(bin_path) * 8
+            
+            # Step 2: 【闭环关键】用I帧参数生成画面，并从画面提取新参数
+            rec_params_float = [x / self.q_step[0] for x in quantized_current]
+            num_kp = self.num_kp
+            kp_size = 3 * num_kp
+            dec_motion = {
+                'kp': torch.tensor(rec_params_float[:kp_size]).view(1, num_kp, 3).float().to(self.device),
+                'exp': torch.tensor(rec_params_float[kp_size:2*kp_size]).view(1, num_kp, 3).float().to(self.device),
+                'scale': torch.tensor(rec_params_float[2*kp_size:2*kp_size+1]).view(1, 1).float().to(self.device) if len(rec_params_float) > 2*kp_size else torch.ones(1, 1).to(self.device),
+                't': torch.tensor(rec_params_float[2*kp_size+1:2*kp_size+4]).view(1, 3).float().to(self.device) if len(rec_params_float) > 2*kp_size+1 else torch.zeros(1, 3).to(self.device),
+                'pitch': torch.tensor(rec_params_float[2*kp_size+4:2*kp_size+5]).float().to(self.device) if len(rec_params_float) > 2*kp_size+4 else torch.zeros(1).to(self.device),
+                'yaw': torch.tensor(rec_params_float[2*kp_size+5:2*kp_size+6]).float().to(self.device) if len(rec_params_float) > 2*kp_size+5 else torch.zeros(1).to(self.device),
+                'roll': torch.tensor(rec_params_float[2*kp_size+6:2*kp_size+7]).float().to(self.device) if len(rec_params_float) > 2*kp_size+6 else torch.zeros(1).to(self.device),
+            }
+            
+            with torch.no_grad():
+                kp_driving = self._transform_keypoints(dec_motion)
+                warped_features = self.warping_network(
+                    feature_3d=self.ref_appearance_features,
+                    kp_driving=kp_driving,
+                    kp_source=self.kp_reference
+                )
+                reconstructed_frame = self.spade_generator(warped_features['out'])
+                
+                # 从重建画面提取运动参数
+                new_motion_output = self.motion_extractor(reconstructed_frame)
+                new_motion_output = self._normalize_motion_output(new_motion_output)
+                
+                new_kp_flat = new_motion_output['kp'].flatten().cpu().numpy().tolist()
+                new_exp_flat = new_motion_output['exp'].flatten().cpu().numpy().tolist()
+                new_scale_flat = new_motion_output['scale'].flatten().cpu().numpy().tolist()
+                new_t_flat = new_motion_output['t'].flatten().cpu().numpy().tolist()
+                new_pitch_v = float(new_motion_output['pitch'].flatten()[0].item())
+                new_yaw_v = float(new_motion_output['yaw'].flatten()[0].item())
+                new_roll_v = float(new_motion_output['roll'].flatten()[0].item())
+                
+                new_params_list = new_kp_flat + new_exp_flat + new_scale_flat + new_t_flat + [new_pitch_v, new_yaw_v, new_roll_v]
+                new_params_quantized = [int(round(x * self.q_step[0])) for x in new_params_list]
+                
+                # 【关键】将从重建画面提取的参数量化并存入rec_sem
+                self.rec_sem.append(new_params_quantized)
+            
+            rec_params = new_params_list
+        else:
+            # P帧：闭环预测
+            # Step 1: 获取前一帧从重建画面提取的参数（存储在rec_sem中）
+            previous_reconstructed_from_frame = self.rec_sem[-1]
+            
+            # Step 2: 计算残差：当前原始参数 - 前一帧重建画面提取参数
+            residual = [int(quantized_current[i] - previous_reconstructed_from_frame[i])
+                       for i in range(len(quantized_current))]
+            
+            # Step 3: 编码残差
+            bin_path = os.path.join(self.kp_output_dir, 'frame' + str(frame_idx).zfill(4) + '.bin')
+            final_encoder_expgolomb(residual.copy(), bin_path)
+            kp_bits = os.path.getsize(bin_path) * 8
+            
+            # Step 4: 重建当前帧参数（在参数空间）
+            rec_quantized = [previous_reconstructed_from_frame[i] + residual[i] 
+                            for i in range(len(residual))]
+            
+            # Step 5: 【闭环关键】用重建参数生成画面，并从画面提取新参数
+            # 反量化为浮点
+            rec_params_float = [x / self.q_step[0] for x in rec_quantized]
+            
+            # 组装为dec_motion格式并生成画面
+            num_kp = self.num_kp
+            kp_size = 3 * num_kp
+            dec_motion = {
+                'kp': torch.tensor(rec_params_float[:kp_size]).view(1, num_kp, 3).float().to(self.device),
+                'exp': torch.tensor(rec_params_float[kp_size:2*kp_size]).view(1, num_kp, 3).float().to(self.device),
+                'scale': torch.tensor(rec_params_float[2*kp_size:2*kp_size+1]).view(1, 1).float().to(self.device) if len(rec_params_float) > 2*kp_size else torch.ones(1, 1).to(self.device),
+                't': torch.tensor(rec_params_float[2*kp_size+1:2*kp_size+4]).view(1, 3).float().to(self.device) if len(rec_params_float) > 2*kp_size+1 else torch.zeros(1, 3).to(self.device),
+                'pitch': torch.tensor(rec_params_float[2*kp_size+4:2*kp_size+5]).float().to(self.device) if len(rec_params_float) > 2*kp_size+4 else torch.zeros(1).to(self.device),
+                'yaw': torch.tensor(rec_params_float[2*kp_size+5:2*kp_size+6]).float().to(self.device) if len(rec_params_float) > 2*kp_size+5 else torch.zeros(1).to(self.device),
+                'roll': torch.tensor(rec_params_float[2*kp_size+6:2*kp_size+7]).float().to(self.device) if len(rec_params_float) > 2*kp_size+6 else torch.zeros(1).to(self.device),
+            }
+            
+            with torch.no_grad():
+                # 生成重建画面
+                kp_driving = self._transform_keypoints(dec_motion)
+                warped_features = self.warping_network(
+                    feature_3d=self.ref_appearance_features,
+                    kp_driving=kp_driving,
+                    kp_source=self.kp_reference
+                )
+                reconstructed_frame = self.spade_generator(warped_features['out'])
+                
+                # 【关键】从重建画面重新提取运动参数
+                new_motion_output = self.motion_extractor(reconstructed_frame)
+                new_motion_output = self._normalize_motion_output(new_motion_output)
+                
+                # 转换为列表并量化
+                new_kp_flat = new_motion_output['kp'].flatten().cpu().numpy().tolist()
+                new_exp_flat = new_motion_output['exp'].flatten().cpu().numpy().tolist()
+                new_scale_flat = new_motion_output['scale'].flatten().cpu().numpy().tolist()
+                new_t_flat = new_motion_output['t'].flatten().cpu().numpy().tolist()
+                new_pitch_v = float(new_motion_output['pitch'].flatten()[0].item())
+                new_yaw_v = float(new_motion_output['yaw'].flatten()[0].item())
+                new_roll_v = float(new_motion_output['roll'].flatten()[0].item())
+                
+                new_params_list = new_kp_flat + new_exp_flat + new_scale_flat + new_t_flat + [new_pitch_v, new_yaw_v, new_roll_v]
+                
+                # 【优化】直接从重建画面提取的参数量化，减少二次量化误差
+                # 注意：残差计算需要量化值，所以这里仍然要量化
+                # 但使用更精确的舍入方式
+                new_params_quantized = [int(round(x * self.q_step[0])) for x in new_params_list]
+                self.rec_sem.append(new_params_quantized)
+            
+            rec_params = new_params_list  # 返回从重建画面提取的参数（浮点）
+        
+        return rec_params, kp_bits

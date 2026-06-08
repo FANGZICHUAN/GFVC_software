@@ -56,6 +56,12 @@ if __name__ == "__main__":
         encoder_type = args['encoder_type']
     else:
         encoder_type = model_name
+    
+    # 读取闭环编码配置（从dataset_config或主配置）
+    if opt.dataset_config is not None and 'closed_loop_encoding' in dataset_args:
+        closed_loop_encoding = dataset_args['closed_loop_encoding']
+    else:
+        closed_loop_encoding = args.get('closed_loop_encoding', 'OFF')
 
     for qp in qplist:
         for seq in tqdm(seqlist):
@@ -63,7 +69,7 @@ if __name__ == "__main__":
                 cmd = "./run.sh "+model_name+" "+coding_mode+" "+original_seq+" "+str(frames)+" "+str(qp)+" "+str(iframe_format) +" "+ \
                                                                                 str(height) +" "+str(width) +" "+str(feature_coding_mode) +" "+ \
                                                                                 str(ae_qf_1) +" "+str(ae_qf_2) +" "+str(sei_coordinate_qf) +" "+str(sei_matrix_qf) +" " + \
-                                                                                str(no_analysis_in_decoder) +" " 
+                                                                                str(no_analysis_in_decoder) +" "+str(closed_loop_encoding)+" " 
                 for blqp in bl_qplist:
                     cmd_blqp = cmd +  use_base_layer + " "+ str(blqp) + " "
                     if coding_mode == 'decoder':

@@ -57,8 +57,8 @@ def run_stage(command, stage_name, model=None):
 #dataset params 
 RGB_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences/'
 YUV_SEQ_DIR = '/home/fangzichuan/GFVC_Software/testing_sequences_YUV420/'
-DATASETS = ['RAVDESS'] #
-SEQ_LIST = ['005']#,'002','003','004','005','006','007','008','009','010','011','012','013','014','015']
+DATASETS = ['VOXCELEB'] #
+SEQ_LIST = ['001']#,'002','003','004','005','006','007','008','009','010','011','012','013','014','015']
 FEATURE_CODING_MODE = 'AE' 
 
 ID = '_'+os.path.basename(__file__)[:-3] + '_'.join(DATASETS) + '_'.join(SEQ_LIST) 
@@ -68,9 +68,14 @@ PATH_TO_SOURCE = os.path.abspath('.')
 PATH_TO_EVAL = os.path.abspath('../evaluate')
 CONFIG = 'config_256'
 
-MODELS = ['LVPT','CFTE','TPSMM','FV2V']
-DECODER_MODELS = ['LVPT','CFTE','TPSMM','FV2V']
+MODELS = ['LVPT'] #,'CFTE','TPSMM','FV2V']
+DECODER_MODELS = ['LVPT'] #,'CFTE','TPSMM','FV2V']
 MODEL_DEVICES = {'LVPT': 'cuda', 'CFTE': 'cuda', 'TPSMM': 'cuda', 'FV2V': 'cuda'}
+
+# 闭环编码控制（实验性功能）
+# ON: 编码完成后立即解码生成重建画面，下一帧基于重建画面提取的参数进行编码
+# OFF: 传统GFVC编码（仅基于参数空间的残差预测）
+CLOSED_LOOP_ENCODING = 'ON'  # 'ON' 或 'OFF'
 
 ENCODE = True
 DECODE = True
@@ -110,6 +115,7 @@ print(f'Datasets: {DATASETS}')
 print(f'Sequences: {SEQ_LIST}')
 print(f'Models: {MODELS}')
 print(f'Feature Coding Mode: {FEATURE_CODING_MODE}')
+print(f'Closed-Loop Encoding: {CLOSED_LOOP_ENCODING}')
 print(f'Config: {CONFIG}')
 print(f'Encode: {ENCODE}, Decode: {DECODE}, Evaluate: {EVALUATE}')
 print(f'Total Tasks: {calculate_total_tasks()}')
@@ -124,7 +130,8 @@ dataset_config = {
  'yuv_sequence_dir':YUV_SEQ_DIR,
  'seq_list':SEQ_LIST,
  'feature_coding_mode': FEATURE_CODING_MODE,
- 'encoder_type': MODELS[0]
+ 'encoder_type': MODELS[0],
+ 'closed_loop_encoding': CLOSED_LOOP_ENCODING
 }
 dataset_config_path = '../'+CONFIG+'/dataset_config'+ID+'.yaml'
 with open(dataset_config_path, "w") as f:
@@ -216,8 +223,10 @@ if SUMMARY_RESULTS:
             if len(args['base_layer_params']['qp']) > 1:
                 qp_iter = args['base_layer_params']['qp']
             else:
-                qp_iter = args['qp_list'] 
-            base_dir = '../experiment/'+model+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+'/'
+                qp_iter = args['qp_list']
+            # 闭环编码路径支持
+            closed_loop_flag = '+closed_loop' if CLOSED_LOOP_ENCODING == 'ON' else ''
+            base_dir = '../experiment/'+model+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+closed_loop_flag+'/'
             summary_path = os.path.join(base_dir,str(tim[0])+'-'+str(tim[1]).zfill(2)+'-'+str(tim[2]).zfill(2)+'T'+str(tim[3]).zfill(2)+'-'+str(tim[4]).zfill(2)+'-'+str(tim[5]).zfill(2)+'-'+model+'-EvaluationSummary.txt')
             with open(summary_path, 'a') as f:
 

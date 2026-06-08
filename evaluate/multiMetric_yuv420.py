@@ -292,7 +292,13 @@ if __name__ == "__main__":
         no_analysis_in_decoder_flag = '+no_analysis_decoding'
     else:
         no_analysis_in_decoder_flag = ''
-
+    
+    # Check for closed-loop encoding mode
+    if opt.dataset_config is not None and 'closed_loop_encoding' in dataset_args:
+        closed_loop_encoding = (dataset_args['closed_loop_encoding'] == 'ON')
+    else:
+        closed_loop_encoding = args.get('closed_loop_encoding', 'OFF') == 'ON'
+    closed_loop_flag = '+closed_loop' if closed_loop_encoding else ''
 
     #Input Frame dimensions
     height=args['height'] #256
@@ -326,11 +332,11 @@ if __name__ == "__main__":
     
 
     if translated:
-        result_dir = '../experiment/'+encoder_type+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+'/evaluation_'+Model+'_dec-YUV420/'
-        base_dir = '../experiment/'+encoder_type+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+'/'    
+        result_dir = '../experiment/'+encoder_type+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+closed_loop_flag+'/evaluation_'+Model+'_dec-YUV420/'
+        base_dir = '../experiment/'+encoder_type+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+closed_loop_flag+'/'    
     else:   
-        result_dir = '../experiment/'+Model+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+'/evaluation-YUV420/'
-        base_dir = '../experiment/'+Model+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+'/'
+        result_dir = '../experiment/'+Model+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+closed_loop_flag+'/evaluation-YUV420/'
+        base_dir = '../experiment/'+Model+'/Iframe_'+Iframe_format+'/'+ str(width)+'x'+str(height) +'/'+feature_coding_mode+no_analysis_in_decoder_flag+closed_loop_flag+'/'
     metric = {'psnr': 1, 'ssim': 1}
     if metric['psnr']:
         totalResult_PSNR=np.zeros((len(seqlist)+1,len(qp_iter)))
